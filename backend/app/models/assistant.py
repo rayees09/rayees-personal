@@ -141,6 +141,8 @@ class QuickTask(Base):
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(String(500), nullable=True)
+    is_today = Column(Boolean, default=False)  # Mark task for today
+    sort_order = Column(Integer, default=0)  # For manual ordering
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User")

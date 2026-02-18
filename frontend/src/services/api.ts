@@ -311,6 +311,14 @@ export const quickTasksApi = {
     const res = await api.put(`/quick-tasks/${id}?${params.toString()}`);
     return res.data;
   },
+  toggleToday: async (id: number) => {
+    const res = await api.put(`/quick-tasks/${id}/toggle-today`);
+    return res.data;
+  },
+  reorder: async (taskIds: number[]) => {
+    const res = await api.put('/quick-tasks/reorder', { task_ids: taskIds });
+    return res.data;
+  },
 };
 
 // Ramadan Goals API

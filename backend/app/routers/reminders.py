@@ -61,6 +61,8 @@ class QuickTaskResponse(BaseModel):
     due_time: Optional[time]
     is_completed: bool
     notes: Optional[str]
+    is_today: bool = False
+    sort_order: int = 0
     created_at: datetime
 
     class Config:
@@ -239,9 +241,11 @@ async def get_quick_tasks(
     if not include_completed:
         query = query.filter(QuickTask.is_completed == False)
 
+    # Sort: today's tasks first, then by sort_order, then by priority
     tasks = query.order_by(
+        QuickTask.is_today.desc(),
+        QuickTask.sort_order.asc(),
         QuickTask.priority.desc(),
-        QuickTask.due_date.asc().nullsfirst(),
         QuickTask.created_at.desc()
     ).all()
 
@@ -357,8 +361,54 @@ async def update_quick_task(
         "category": task.category,
         "priority": task.priority,
         "due_date": task.due_date.isoformat() if task.due_date else None,
-        "notes": task.notes
+        "notes": task.notes,
+        "is_today": task.is_today,
+        "sort_order": task.sort_order
     }
+
+
+@router.put("/quick-tasks/{task_id}/toggle-today")
+async def toggle_task_today(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Toggle a task's 'today' status."""
+    task = db.query(QuickTask).filter(
+        QuickTask.id == task_id,
+        QuickTask.user_id == current_user.id
+    ).first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task.is_today = not task.is_today
+    db.commit()
+
+    return {"id": task.id, "is_today": task.is_today}
+
+
+class ReorderRequest(BaseModel):
+    task_ids: List[int]
+
+
+@router.put("/quick-tasks/reorder")
+async def reorder_tasks(
+    request: ReorderRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reorder tasks by setting sort_order based on the task_ids list order."""
+    for index, task_id in enumerate(request.task_ids):
+        task = db.query(QuickTask).filter(
+            QuickTask.id == task_id,
+            QuickTask.user_id == current_user.id
+        ).first()
+        if task:
+            task.sort_order = index
+
+    db.commit()
+    return {"message": "Tasks reordered"}
 
 
 # ============== APP SETTINGS ==============

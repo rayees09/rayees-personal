@@ -8,7 +8,7 @@ import { useState } from 'react';
 
 const navItems = [
   { path: '/', icon: Home, label: 'Dashboard' },
-  { path: '/tasks', icon: CheckSquare, label: 'Kids Tasks' },
+  { path: '/tasks', icon: CheckSquare, label: 'Family Tasks' },
   { path: '/my-tasks', icon: Briefcase, label: 'My Tasks', parentOnly: true },
   { path: '/reminders', icon: Bell, label: 'Reminders' },
   { path: '/prayers', icon: Moon, label: 'Prayers' },
