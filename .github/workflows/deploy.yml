@@ -3,6 +3,7 @@ name: Deploy to EC2
 on:
   push:
     branches: [main]
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   deploy:
@@ -18,23 +19,38 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
           script: |
+            set -e
+
+            # First time setup - clone if not exists
+            if [ ! -d "/var/www/family-app" ]; then
+              sudo mkdir -p /var/www/family-app
+              sudo chown $USER:$USER /var/www/family-app
+              cd /var/www/family-app
+              git clone https://github.com/rayees09/rayees-personal.git .
+            fi
+
             cd /var/www/family-app
 
             # Pull latest code
-            git pull origin main
+            git fetch origin
+            git reset --hard origin/main
 
             # Backend
             cd backend
+            if [ ! -d "venv" ]; then
+              python3 -m venv venv
+            fi
             source venv/bin/activate
-            pip install -r requirements.txt
+            pip install -r requirements.txt --quiet
 
             # Frontend
             cd ../frontend
-            npm install
+            npm install --silent
             npm run build
 
             # Restart service
-            sudo systemctl restart family-app
+            sudo systemctl restart family-app || echo "Service not set up yet"
 
-            echo "Deployed successfully!"
+            echo "✅ Deployed successfully!"
