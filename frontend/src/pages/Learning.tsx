@@ -8,7 +8,7 @@ export default function Learning() {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<number | null>(user?.id || null);
-  const [activeTab, setActiveTab] = useState<'upload' | 'history' | 'proficiency' | 'worksheet' | 'my-worksheets'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'history' | 'proficiency' | 'worksheet' | 'my-worksheets' | 'assigned'>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: family } = useQuery({
@@ -71,6 +71,13 @@ export default function Learning() {
     queryKey: ['assigned-worksheets', user?.id],
     queryFn: () => learningApi.getAssignedWorksheets(user?.id || 0),
     enabled: !!user && user.role === 'child' && activeTab === 'my-worksheets',
+  });
+
+  // Get all assigned worksheets for parents
+  const { data: allAssignedWorksheets } = useQuery({
+    queryKey: ['all-assigned-worksheets', selectedUser],
+    queryFn: () => learningApi.getAssignedWorksheets(selectedUser || 0),
+    enabled: !!selectedUser && user?.role === 'parent' && activeTab === 'assigned',
   });
 
   const [uploadResult, setUploadResult] = useState<any>(null);
@@ -183,6 +190,7 @@ export default function Learning() {
           { id: 'history', label: 'History', icon: FileText, roles: ['parent', 'child'] },
           { id: 'proficiency', label: 'Progress', icon: TrendingUp, roles: ['parent', 'child'] },
           { id: 'worksheet', label: 'Generate', icon: Printer, roles: ['parent'] },
+          { id: 'assigned', label: 'Assigned', icon: Send, roles: ['parent'] },
         ].filter(tab => tab.roles.includes(user?.role || 'parent')).map((tab) => {
           const Icon = tab.icon;
           return (
@@ -715,6 +723,69 @@ export default function Learning() {
                           Submit
                         </button>
                       </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Assigned Tab (for parents to see assigned worksheets) */}
+      {activeTab === 'assigned' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">Assigned Worksheets</h3>
+            {selectedChild && (
+              <span className="text-sm text-gray-500">Viewing: {selectedChild.name}</span>
+            )}
+          </div>
+
+          {!allAssignedWorksheets?.length ? (
+            <div className="text-center py-12 text-gray-500">
+              <ClipboardList size={48} className="mx-auto mb-4 text-gray-300" />
+              <p>No worksheets assigned to {selectedChild?.name || 'this child'} yet.</p>
+              <p className="text-sm">Go to Generate tab to create and assign worksheets.</p>
+            </div>
+          ) : (
+            allAssignedWorksheets.map((worksheet: any) => (
+              <div
+                key={worksheet.id}
+                className={`bg-white rounded-xl p-4 shadow-sm border-l-4 ${
+                  worksheet.status === 'graded'
+                    ? 'border-green-500'
+                    : worksheet.status === 'submitted'
+                    ? 'border-yellow-500'
+                    : 'border-blue-500'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">{worksheet.title}</h3>
+                    <p className="text-sm text-gray-500">
+                      {worksheet.subject} • {worksheet.difficulty} • {worksheet.questions_count} questions
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Assigned: {worksheet.assigned_at ? new Date(worksheet.assigned_at).toLocaleDateString() : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    {worksheet.status === 'graded' ? (
+                      <div>
+                        <p className="text-2xl font-bold text-green-600">{worksheet.score?.toFixed(0)}%</p>
+                        <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                          Graded
+                        </span>
+                      </div>
+                    ) : worksheet.status === 'submitted' ? (
+                      <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full">
+                        Submitted
+                      </span>
+                    ) : (
+                      <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                        Pending
+                      </span>
                     )}
                   </div>
                 </div>
