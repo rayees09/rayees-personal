@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { tasksApi, authApi } from '../services/api';
 import { format } from 'date-fns';
-import { Plus, Check, Clock, Filter, X } from 'lucide-react';
+import { Plus, Check, Clock, X } from 'lucide-react';
 
 export default function Tasks() {
   const user = useAuthStore((state) => state.user);

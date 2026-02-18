@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuthStore } from '../store/authStore';
 import { quickTasksApi } from '../services/api';
 import { format } from 'date-fns';
-import { Plus, Check, Briefcase, User, Heart, DollarSign, Users, X, Clock, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Briefcase, User, Heart, DollarSign, Users, X, Clock, Edit2, Trash2 } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'personal', label: 'Personal', icon: User, color: 'bg-blue-100 text-blue-700' },
@@ -21,7 +20,6 @@ const PRIORITIES = [
 ];
 
 export default function MyTasks() {
-  const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);

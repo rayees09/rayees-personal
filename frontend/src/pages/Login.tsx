@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../services/api';
-import { Users, KeyRound } from 'lucide-react';
 
 interface FamilyMember {
   id: number;

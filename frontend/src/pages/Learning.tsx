@@ -2,13 +2,13 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { learningApi, authApi } from '../services/api';
-import { Upload, Camera, BookOpen, TrendingUp, AlertTriangle, FileText, Printer, ChevronDown, ChevronUp, Check, X, ClipboardList, Send, Play } from 'lucide-react';
+import { Upload, BookOpen, TrendingUp, AlertTriangle, FileText, Printer, ChevronDown, ChevronUp, Check, X, ClipboardList, Send } from 'lucide-react';
 
 export default function Learning() {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<number | null>(user?.id || null);
-  const [activeTab, setActiveTab] = useState<'upload' | 'history' | 'proficiency' | 'worksheet'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'history' | 'proficiency' | 'worksheet' | 'my-worksheets'>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: family } = useQuery({

@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuthStore } from '../store/authStore';
 import { remindersApi, authApi } from '../services/api';
 import { format, formatDistanceToNow, isPast } from 'date-fns';
-import { Bell, Plus, Check, Trash2, X, Clock, AlertTriangle, Calendar, Users } from 'lucide-react';
+import { Plus, Check, Trash2, X, Clock, AlertTriangle, Calendar, Users } from 'lucide-react';
 
 const REMINDER_TYPES = [
   { id: 'general', label: 'General', color: 'bg-gray-100 text-gray-700' },
@@ -21,7 +20,6 @@ const PRIORITIES = [
 ];
 
 export default function Reminders() {
-  const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [filterType, setFilterType] = useState<string | null>(null);

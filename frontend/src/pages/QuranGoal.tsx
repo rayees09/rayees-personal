@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { quranGoalsApi, authApi } from '../services/api';
 import { format } from 'date-fns';
-import { BookOpen, Camera, Upload, Target, TrendingUp, Check, Plus, Calendar, Edit2, Trash2, X } from 'lucide-react';
+import { BookOpen, Camera, Target, TrendingUp, Check, Plus, Calendar, Edit2, Trash2, X } from 'lucide-react';
 
 export default function QuranGoal() {
   const user = useAuthStore((state) => state.user);
@@ -98,7 +98,6 @@ export default function QuranGoal() {
   }
 
   // Get the name of the selected user for display
-  const selectedUserName = family?.find((m: any) => m.id === selectedUser)?.name || user?.name || '';
 
   if (!goal) {
     return (

@@ -3,13 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { zakatApi } from '../services/api';
 import { format } from 'date-fns';
-import { Coins, Plus, Trash2, X, TrendingUp, CheckCircle, Edit2 } from 'lucide-react';
+import { Coins, Plus, Trash2, X, CheckCircle, Edit2 } from 'lucide-react';
 
 export default function Zakat() {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [_selectedYear, _setSelectedYear] = useState(currentYear);
   const [showAddConfig, setShowAddConfig] = useState(false);
   const [showEditConfig, setShowEditConfig] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);

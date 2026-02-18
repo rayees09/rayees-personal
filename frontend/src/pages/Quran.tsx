@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { islamicApi, authApi } from '../services/api';
-import { BookOpen, Check, Plus, Edit2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 export default function Quran() {
   const user = useAuthStore((state) => state.user);
