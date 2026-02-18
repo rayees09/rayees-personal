@@ -10,7 +10,7 @@ export default function Tasks() {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filter, setFilter] = useState<string>('all');
-  const [viewTab, setViewTab] = useState<'all' | 'today' | 'upcoming'>('today');
+  const [viewTab, setViewTab] = useState<'all' | 'today' | 'upcoming' | 'completed'>('today');
   const [selectedUser, setSelectedUser] = useState<number | null>(null);
   const [draggedTask, setDraggedTask] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<any>(null);
@@ -50,24 +50,34 @@ export default function Tasks() {
   const getFilteredTasks = () => {
     let filtered = tasks || [];
 
-    // First filter by status
-    if (filter !== 'all') {
-      filtered = filtered.filter((task: any) => task.status === filter);
-    }
-
-    // Then filter by view tab
+    // Filter by view tab
     if (viewTab === 'today') {
+      // Today shows pending tasks (with today/past due date or no due date)
       filtered = filtered.filter((task: any) => {
+        if (task.status === 'completed' || task.status === 'verified') return false;
         if (!task.due_date) return true; // Tasks without due date show in today
         const dueDate = new Date(task.due_date);
         return isToday(dueDate) || isPast(dueDate);
       });
     } else if (viewTab === 'upcoming') {
+      // Upcoming shows pending tasks with future due dates
       filtered = filtered.filter((task: any) => {
+        if (task.status === 'completed' || task.status === 'verified') return false;
         if (!task.due_date) return false;
         const dueDate = new Date(task.due_date);
         return !isToday(dueDate) && !isPast(dueDate);
       });
+    } else if (viewTab === 'completed') {
+      // Completed tab shows all completed/verified tasks
+      filtered = filtered.filter((task: any) =>
+        task.status === 'completed' || task.status === 'verified'
+      );
+    }
+    // 'all' shows everything
+
+    // Then filter by status if not 'all'
+    if (filter !== 'all' && viewTab === 'all') {
+      filtered = filtered.filter((task: any) => task.status === filter);
     }
 
     // Sort by priority (pending first, then by due date)
@@ -180,7 +190,7 @@ export default function Tasks() {
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
         <button
           onClick={() => setViewTab('today')}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
             viewTab === 'today'
               ? 'bg-white shadow text-islamic-green'
               : 'text-gray-600 hover:text-gray-800'
@@ -190,7 +200,7 @@ export default function Tasks() {
         </button>
         <button
           onClick={() => setViewTab('upcoming')}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
             viewTab === 'upcoming'
               ? 'bg-white shadow text-islamic-green'
               : 'text-gray-600 hover:text-gray-800'
@@ -199,8 +209,18 @@ export default function Tasks() {
           Upcoming
         </button>
         <button
+          onClick={() => setViewTab('completed')}
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
+            viewTab === 'completed'
+              ? 'bg-white shadow text-islamic-green'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          Completed
+        </button>
+        <button
           onClick={() => setViewTab('all')}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
             viewTab === 'all'
               ? 'bg-white shadow text-islamic-green'
               : 'text-gray-600 hover:text-gray-800'
@@ -250,7 +270,7 @@ export default function Tasks() {
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-4 py-2 border-b bg-gray-50">
           <h2 className="font-semibold text-sm text-gray-700">
-            {viewTab === 'today' ? "Today's Tasks" : viewTab === 'upcoming' ? 'Upcoming Tasks' : 'All Tasks'}
+            {viewTab === 'today' ? "Today's Tasks" : viewTab === 'upcoming' ? 'Upcoming Tasks' : viewTab === 'completed' ? 'Completed Tasks' : 'All Tasks'}
           </h2>
         </div>
 
@@ -412,8 +432,8 @@ function CreateTaskModal({ family, categories, onClose }: { family: any[]; categ
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl w-full max-w-md">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="p-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Create Task</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
@@ -542,8 +562,8 @@ function EditTaskModal({ task, family, categories, onClose }: { task: any; famil
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl w-full max-w-md">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="p-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Edit Task</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
