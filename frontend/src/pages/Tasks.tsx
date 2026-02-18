@@ -301,17 +301,21 @@ export default function Tasks() {
 
                 {/* Checkbox */}
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (task.status === 'pending') {
-                      completeMutation.mutate(task.id);
+                      if (confirm(`Mark "${task.title}" as done?`)) {
+                        completeMutation.mutate(task.id);
+                      }
                     }
                   }}
                   disabled={task.status !== 'pending'}
                   className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                     task.status === 'completed' || task.status === 'verified'
                       ? 'bg-green-500 border-green-500 text-white'
-                      : 'border-gray-300 hover:border-green-500'
+                      : 'border-gray-300 hover:border-green-500 hover:bg-green-50'
                   }`}
+                  title={task.status === 'pending' ? 'Click to mark as done' : 'Completed'}
                 >
                   {(task.status === 'completed' || task.status === 'verified') && (
                     <Check size={12} />
