@@ -1,1 +1,1 @@
-# Rayees Family App
+# Rayees Family App - Personal family management
