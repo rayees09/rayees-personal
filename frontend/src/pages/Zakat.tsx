@@ -506,26 +506,32 @@ export default function Zakat() {
               </div>
 
               {/* Show conversion info */}
-              {inputCurrency !== 'USD' && inputCurrency !== selectedConfig?.currency && (
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-blue-700">
-                      {loadingRate ? (
-                        <span className="flex items-center gap-1">
-                          <RefreshCw size={14} className="animate-spin" />
-                          Fetching rate...
-                        </span>
-                      ) : exchangeRate ? (
-                        <>1 {inputCurrency} = {exchangeRate.toFixed(4)} {selectedConfig?.currency}</>
-                      ) : (
-                        'Rate unavailable'
-                      )}
-                    </span>
+              {inputCurrency !== 'USD' && (
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="font-medium text-blue-800">Today's Exchange Rate</span>
+                    {loadingRate && (
+                      <RefreshCw size={14} className="animate-spin text-blue-600" />
+                    )}
+                  </div>
+                  <div className="text-blue-700">
+                    {loadingRate ? (
+                      <span>Fetching live rate...</span>
+                    ) : exchangeRate ? (
+                      <span className="text-lg font-semibold">
+                        1 {inputCurrency} = ${exchangeRate.toFixed(4)} USD
+                      </span>
+                    ) : (
+                      'Rate unavailable'
+                    )}
                   </div>
                   {inputAmount > 0 && exchangeRate && (
-                    <p className="text-lg font-semibold text-blue-800 mt-2">
-                      = {formatCurrency(convertedAmount, selectedConfig?.currency || 'USD')}
-                    </p>
+                    <div className="mt-2 p-2 bg-green-100 rounded border border-green-300">
+                      <p className="text-sm text-green-700">You entered: {inputAmount.toLocaleString()} {inputCurrency}</p>
+                      <p className="text-xl font-bold text-green-800">
+                        = ${convertedAmount.toLocaleString()} USD
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -552,16 +558,18 @@ export default function Zakat() {
               </div>
               <button
                 onClick={() => {
-                  // Use converted amount
-                  const finalAmount = inputCurrency !== selectedConfig?.currency && exchangeRate
+                  // Use converted amount (always save in USD)
+                  const finalAmount = inputCurrency !== 'USD' && exchangeRate
                     ? Math.round(inputAmount * exchangeRate)
                     : Math.round(inputAmount);
                   addPaymentMutation.mutate({ ...paymentForm, amount: finalAmount });
                 }}
-                disabled={!inputAmount || addPaymentMutation.isPending || (inputCurrency !== 'USD' && inputCurrency !== selectedConfig?.currency && !exchangeRate)}
+                disabled={!inputAmount || addPaymentMutation.isPending || (inputCurrency !== 'USD' && !exchangeRate)}
                 className="w-full py-2 bg-islamic-green text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
               >
-                {addPaymentMutation.isPending ? 'Adding...' : `Add Payment ${inputCurrency !== selectedConfig?.currency && exchangeRate ? `(${formatCurrency(convertedAmount, selectedConfig?.currency || 'USD')})` : ''}`}
+                {addPaymentMutation.isPending ? 'Adding...' : inputCurrency !== 'USD' && exchangeRate
+                  ? `Add Payment ($${convertedAmount.toLocaleString()} USD)`
+                  : 'Add Payment'}
               </button>
             </div>
           </div>
