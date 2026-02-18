@@ -3,8 +3,8 @@ Description=Family App Backend
 After=network.target
 
 [Service]
-User=appuser
-Group=appuser
+User=ec2-user
+Group=ec2-user
 WorkingDirectory=/var/www/family-app/backend
 Environment="PATH=/var/www/family-app/backend/venv/bin"
 EnvironmentFile=/var/www/family-app/backend/.env

@@ -19,7 +19,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_VM_KEY }}
-          command_timeout: 10m
+          command_timeout: 15m
           script: |
             set -e
 
@@ -37,20 +37,40 @@ jobs:
             git fetch origin
             git reset --hard origin/main
 
-            # Backend
+            # Backend setup
             cd backend
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
             source venv/bin/activate
             pip install -r requirements.txt --quiet
+            pip install gunicorn --quiet
 
-            # Frontend
+            # Create .env if not exists
+            if [ ! -f ".env" ]; then
+              cat > .env << 'ENVEOF'
+            DATABASE_URL=postgresql://tkuser:tkuser@10.0.1.189:5432/rayees_family
+            SECRET_KEY=rayees-family-secret-key-2024
+            OPENAI_API_KEY=change-me
+            ENVEOF
+            fi
+
+            # Frontend build
             cd ../frontend
             npm install --silent
             npm run build
 
-            # Restart service
-            sudo systemctl restart family-app || echo "Service not set up yet"
+            # Setup nginx
+            sudo cp /var/www/family-app/deploy/nginx.conf /etc/nginx/conf.d/family-app.conf
+            sudo rm -f /etc/nginx/conf.d/default.conf 2>/dev/null || true
+            sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+            sudo nginx -t && sudo systemctl reload nginx
+
+            # Setup systemd service
+            sudo cp /var/www/family-app/deploy/family-app.service /etc/systemd/system/
+            sudo systemctl daemon-reload
+            sudo systemctl enable family-app
+            sudo systemctl restart family-app
 
             echo "✅ Deployed successfully!"
+            echo "🌐 Access at: http://${{ secrets.EC2_HOST }}"
