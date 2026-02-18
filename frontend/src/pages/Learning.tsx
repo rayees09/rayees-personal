@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { learningApi, authApi } from '../services/api';
@@ -73,13 +73,6 @@ export default function Learning() {
     enabled: !!user && user.role === 'child' && activeTab === 'my-worksheets',
   });
 
-  // Get all assigned worksheets for parents
-  const { data: allAssignedWorksheets } = useQuery({
-    queryKey: ['all-assigned-worksheets', selectedUser],
-    queryFn: () => learningApi.getAssignedWorksheets(selectedUser || 0),
-    enabled: !!selectedUser && user?.role === 'parent' && activeTab === 'assigned',
-  });
-
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [worksheetResult, setWorksheetResult] = useState<any>(null);
   const [showDetailedResults, setShowDetailedResults] = useState(false);
@@ -91,6 +84,24 @@ export default function Learning() {
   const [assignToKid, setAssignToKid] = useState<number | null>(null);
   const submitFileRef = useRef<HTMLInputElement>(null);
   const [selectedWorksheetForSubmit, setSelectedWorksheetForSubmit] = useState<number | null>(null);
+  const [assignedFilterUserId, setAssignedFilterUserId] = useState<number | null>(null);
+
+  // Set initial filter to first child when family loads (for assigned tab)
+  useEffect(() => {
+    if (family && user?.role === 'parent') {
+      const children = family.filter((m: any) => m.role === 'child');
+      if (children.length > 0 && assignedFilterUserId === null) {
+        setAssignedFilterUserId(children[0].id);
+      }
+    }
+  }, [family, user?.role, assignedFilterUserId]);
+
+  // Get all assigned worksheets for parents (filtered by selected child)
+  const { data: allAssignedWorksheets } = useQuery({
+    queryKey: ['all-assigned-worksheets', assignedFilterUserId],
+    queryFn: () => learningApi.getAssignedWorksheets(assignedFilterUserId || 0),
+    enabled: !!assignedFilterUserId && user?.role === 'parent' && activeTab === 'assigned',
+  });
 
   const selectedChild = family?.find((m: any) => m.id === selectedUser);
 
@@ -737,15 +748,27 @@ export default function Learning() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">Assigned Worksheets</h3>
-            {selectedChild && (
-              <span className="text-sm text-gray-500">Viewing: {selectedChild.name}</span>
+            {family && (
+              <select
+                value={assignedFilterUserId || ''}
+                onChange={(e) => setAssignedFilterUserId(Number(e.target.value) || null)}
+                className="px-3 py-2 border rounded-lg"
+              >
+                {family
+                  .filter((m: any) => m.role === 'child')
+                  .map((member: any) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name}
+                    </option>
+                  ))}
+              </select>
             )}
           </div>
 
           {!allAssignedWorksheets?.length ? (
             <div className="text-center py-12 text-gray-500">
               <ClipboardList size={48} className="mx-auto mb-4 text-gray-300" />
-              <p>No worksheets assigned to {selectedChild?.name || 'this child'} yet.</p>
+              <p>No worksheets assigned to {family?.find((m: any) => m.id === assignedFilterUserId)?.name || 'this child'} yet.</p>
               <p className="text-sm">Go to Generate tab to create and assign worksheets.</p>
             </div>
           ) : (
