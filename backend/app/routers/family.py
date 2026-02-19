@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 
 from app.database import get_db
@@ -149,7 +149,11 @@ async def verify_email(
     # Check if token is expired (24 hours)
     if user.verification_sent_at:
         expiry = user.verification_sent_at + timedelta(hours=24)
-        if datetime.utcnow() > expiry:
+        now = datetime.now(timezone.utc)
+        # Handle timezone-naive datetime from database
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        if now > expiry:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Verification token has expired. Please request a new one."
