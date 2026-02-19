@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ToggleLeft, ToggleRight, Info } from 'lucide-react';
+import { ArrowLeft, ToggleRight, Info } from 'lucide-react';
 import api from '../../services/api';
 
 interface Feature {

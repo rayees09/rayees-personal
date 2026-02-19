@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Users, Home, DollarSign, Cpu, Settings, LogOut,
-  TrendingUp, Activity, Mail, ToggleLeft, Shield
+  Activity, Mail, ToggleLeft, Shield
 } from 'lucide-react';
 import api from '../../services/api';
 

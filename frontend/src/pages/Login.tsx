@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../services/api';
-import { Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Mail, User, ArrowLeft } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();

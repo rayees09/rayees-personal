@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Users, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../services/api';
 
 export default function Register() {
-  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     family_name: '',
     owner_name: '',
