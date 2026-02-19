@@ -27,7 +27,7 @@ from app.config import settings
 def create_admin(email: str, password: str, name: str, db_url: str = None):
     """Create a new admin account."""
     # Use provided DB URL or get from settings
-    database_url = db_url or settings.DATABASE_URL
+    database_url = db_url or settings.database_url
 
     engine = create_engine(database_url)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -63,7 +63,7 @@ def create_admin(email: str, password: str, name: str, db_url: str = None):
 
 def list_admins(db_url: str = None):
     """List all admin accounts."""
-    database_url = db_url or settings.DATABASE_URL
+    database_url = db_url or settings.database_url
 
     engine = create_engine(database_url)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
