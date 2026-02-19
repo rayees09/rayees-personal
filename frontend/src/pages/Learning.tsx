@@ -113,13 +113,28 @@ export default function Learning() {
 
   // Get grade level category for topic suggestions
   const getGradeCategory = (grade: string | null) => {
-    if (!grade) return 'elementary';
-    const g = grade.toLowerCase();
-    if (g.includes('toddler') || g.includes('pre-k') || g.includes('preschool') || g.includes('kindergarten')) return 'toddler';
-    if (g.includes('1st') || g.includes('2nd') || g.includes('3rd')) return 'early';
-    if (g.includes('4th') || g.includes('5th') || g.includes('6th')) return 'middle';
-    if (g.includes('7th') || g.includes('8th')) return 'junior';
-    return 'elementary';
+    if (!grade) return 'middle'; // Default to middle if no grade
+    const g = grade.toLowerCase().trim();
+
+    // Check for toddler/pre-school
+    if (g.includes('toddler') || g.includes('pre-k') || g.includes('preschool') || g.includes('kindergarten') || g.includes('kg')) return 'toddler';
+
+    // Extract numeric grade if present (handles "3", "Grade 3", "3rd", "3rd grade", etc.)
+    const numMatch = g.match(/(\d+)/);
+    if (numMatch) {
+      const gradeNum = parseInt(numMatch[1]);
+      if (gradeNum <= 3) return 'early';  // Grade 1-3
+      if (gradeNum <= 6) return 'middle'; // Grade 4-6
+      if (gradeNum <= 8) return 'junior'; // Grade 7-8
+      return 'junior'; // Grade 9+ treat as junior for now
+    }
+
+    // Fallback text matching
+    if (g.includes('1st') || g.includes('2nd') || g.includes('3rd') || g.includes('first') || g.includes('second') || g.includes('third')) return 'early';
+    if (g.includes('4th') || g.includes('5th') || g.includes('6th') || g.includes('fourth') || g.includes('fifth') || g.includes('sixth')) return 'middle';
+    if (g.includes('7th') || g.includes('8th') || g.includes('seventh') || g.includes('eighth')) return 'junior';
+
+    return 'middle'; // Default
   };
 
   const gradeCategory = getGradeCategory(selectedChild?.grade);

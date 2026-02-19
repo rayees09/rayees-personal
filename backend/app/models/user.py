@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, DateTime, Enum, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -14,6 +14,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    family_id = Column(Integer, ForeignKey("families.id"), nullable=True)  # Multi-tenant support
     name = Column(String(100), nullable=False)
     username = Column(String(50), unique=True, index=True, nullable=True)  # For kids login
     email = Column(String(255), unique=True, index=True, nullable=True)  # Optional for kids
@@ -23,10 +24,22 @@ class User(Base):
     avatar = Column(String(255), nullable=True)
     school = Column(String(255), nullable=True)
     grade = Column(String(50), nullable=True)
+    total_points = Column(Integer, default=0)  # Cached total points
+
+    # Email verification
+    is_email_verified = Column(Boolean, default=False)
+    verification_token = Column(String(255), nullable=True)
+    verification_sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Password reset
+    reset_token = Column(String(255), nullable=True)
+    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
+    family = relationship("Family", back_populates="members")
     tasks_assigned = relationship("Task", back_populates="assignee", foreign_keys="Task.assigned_to")
     tasks_created = relationship("Task", back_populates="creator", foreign_keys="Task.created_by")
     points = relationship("PointsLedger", back_populates="user")
@@ -37,6 +50,7 @@ class User(Base):
     appointments = relationship("Appointment", back_populates="user")
     homework = relationship("Homework", back_populates="user")
     habits = relationship("Habit", back_populates="user")
+    token_usage = relationship("AiTokenUsage", back_populates="user")
 
 
 class FamilyMember(Base):

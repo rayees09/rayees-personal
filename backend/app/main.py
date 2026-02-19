@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import engine, Base
 from app.routers import auth, tasks, islamic, learning
 from app.routers import quran_goals, reminders, expenses, ai_context
+from app.routers import admin, family
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -41,21 +42,26 @@ app.include_router(quran_goals.router)
 app.include_router(reminders.router)
 app.include_router(expenses.router)
 app.include_router(ai_context.router)
+app.include_router(admin.router)
+app.include_router(family.router)
 
 
 @app.get("/")
 async def root():
     return {
         "app": settings.app_name,
-        "message": "Welcome to Rayees Family App!",
+        "message": "Welcome to Family Hub - Your Complete Family Management App!",
         "docs": "/docs",
-        "family": [
-            {"name": "Rayees", "role": "parent"},
-            {"name": "Shibila", "role": "parent"},
-            {"name": "Kanz", "role": "child", "school": "Thortan School", "grade": "6th"},
-            {"name": "Nouman", "role": "child", "school": "Warrick Fremont"},
-            {"name": "Zakia", "role": "child"}
-        ]
+        "features": [
+            "Prayer & Islamic Practice Tracking",
+            "Family Task Management",
+            "Kids Learning & Homework Analysis",
+            "Points & Rewards System",
+            "Expense Tracking",
+            "Reminders & Calendar"
+        ],
+        "register": "/register",
+        "login": "/login"
     }
 
 

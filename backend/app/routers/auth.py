@@ -90,6 +90,13 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid credentials"
         )
 
+    # Check if email verification is required (for users with email)
+    if user.email and not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified. Please check your email for the verification link."
+        )
+
     # Get total points
     total_points = db.query(func.sum(PointsLedger.points)).filter(
         PointsLedger.user_id == user.id
@@ -175,8 +182,9 @@ async def get_family_members(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all family members."""
-    users = db.query(User).all()
+    """Get all family members for the current user's family."""
+    # Filter by family_id for multi-tenant isolation
+    users = db.query(User).filter(User.family_id == current_user.family_id).all()
     result = []
     for user in users:
         total_points = db.query(func.sum(PointsLedger.points)).filter(

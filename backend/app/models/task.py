@@ -60,6 +60,7 @@ class Reward(Base):
     __tablename__ = "rewards"
 
     id = Column(Integer, primary_key=True, index=True)
+    family_id = Column(Integer, ForeignKey("families.id"), nullable=True)  # Multi-tenant support
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     points_required = Column(Integer, nullable=False)

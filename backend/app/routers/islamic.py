@@ -491,9 +491,10 @@ async def create_zakat_config(
     db: Session = Depends(get_db)
 ):
     """Create or update Zakat configuration for a year (family-level)."""
-    # Check if config exists for this year (family-level, one per year)
-    existing = db.query(ZakatConfig).filter(
-        ZakatConfig.year == config_data.year
+    # Check if config exists for this year within the same family
+    existing = db.query(ZakatConfig).join(User, ZakatConfig.user_id == User.id).filter(
+        ZakatConfig.year == config_data.year,
+        User.family_id == current_user.family_id
     ).first()
 
     if existing:
@@ -524,7 +525,10 @@ async def get_zakat_configs(
     db: Session = Depends(get_db)
 ):
     """Get Zakat configurations (family-level)."""
-    query = db.query(ZakatConfig)
+    # Filter by family - join through users table
+    query = db.query(ZakatConfig).join(User, ZakatConfig.user_id == User.id).filter(
+        User.family_id == current_user.family_id
+    )
 
     if year:
         query = query.filter(ZakatConfig.year == year)
@@ -540,8 +544,9 @@ async def get_zakat_config(
     db: Session = Depends(get_db)
 ):
     """Get a specific Zakat configuration (family-level)."""
-    config = db.query(ZakatConfig).filter(
-        ZakatConfig.id == config_id
+    config = db.query(ZakatConfig).join(User, ZakatConfig.user_id == User.id).filter(
+        ZakatConfig.id == config_id,
+        User.family_id == current_user.family_id
     ).first()
 
     if not config:
@@ -560,8 +565,9 @@ async def update_zakat_config(
     db: Session = Depends(get_db)
 ):
     """Update a Zakat configuration (family-level)."""
-    config = db.query(ZakatConfig).filter(
-        ZakatConfig.id == config_id
+    config = db.query(ZakatConfig).join(User, ZakatConfig.user_id == User.id).filter(
+        ZakatConfig.id == config_id,
+        User.family_id == current_user.family_id
     ).first()
 
     if not config:
@@ -586,8 +592,9 @@ async def delete_zakat_config(
     db: Session = Depends(get_db)
 ):
     """Delete a Zakat configuration (family-level)."""
-    config = db.query(ZakatConfig).filter(
-        ZakatConfig.id == config_id
+    config = db.query(ZakatConfig).join(User, ZakatConfig.user_id == User.id).filter(
+        ZakatConfig.id == config_id,
+        User.family_id == current_user.family_id
     ).first()
 
     if not config:
@@ -626,6 +633,15 @@ async def get_zakat_payments(
     db: Session = Depends(get_db)
 ):
     """Get all payments for a Zakat config."""
+    # Verify the config belongs to the user's family
+    config = db.query(ZakatConfig).join(User, ZakatConfig.user_id == User.id).filter(
+        ZakatConfig.id == config_id,
+        User.family_id == current_user.family_id
+    ).first()
+
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+
     payments = db.query(ZakatPayment).filter(
         ZakatPayment.config_id == config_id
     ).order_by(ZakatPayment.date.desc()).all()
@@ -639,8 +655,14 @@ async def delete_zakat_payment(
     db: Session = Depends(get_db)
 ):
     """Delete a Zakat payment (family-level)."""
-    payment = db.query(ZakatPayment).filter(
-        ZakatPayment.id == payment_id
+    # Verify the payment's config belongs to the user's family
+    payment = db.query(ZakatPayment).join(
+        ZakatConfig, ZakatPayment.config_id == ZakatConfig.id
+    ).join(
+        User, ZakatConfig.user_id == User.id
+    ).filter(
+        ZakatPayment.id == payment_id,
+        User.family_id == current_user.family_id
     ).first()
 
     if not payment:

@@ -2,9 +2,10 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import {
   Home, CheckSquare, Moon, BookOpen, GraduationCap, Star, LogOut, Menu, X,
-  Briefcase, Bell, Target, Settings, Coins, Wallet
+  Briefcase, Bell, Target, Settings, Coins, Wallet, Users
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import api from '../services/api';
 
 const navItems = [
   { path: '/', icon: Home, label: 'Dashboard' },
@@ -19,6 +20,7 @@ const navItems = [
   { path: '/learning', icon: GraduationCap, label: 'Learning' },
   { path: '/points', icon: Star, label: 'Points' },
   { path: '/expenses', icon: Wallet, label: 'Expenses', parentOnly: true },
+  { path: '/family', icon: Users, label: 'Family Members', parentOnly: true },
   { path: '/settings', icon: Settings, label: 'Settings', parentOnly: true },
 ];
 
@@ -26,6 +28,19 @@ export default function Layout() {
   const { user, logout } = useAuthStore();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [familyName, setFamilyName] = useState('Family Hub');
+
+  useEffect(() => {
+    const fetchFamily = async () => {
+      try {
+        const response = await api.get('/family/me');
+        setFamilyName(response.data.name || 'Family Hub');
+      } catch (err) {
+        console.error('Failed to fetch family:', err);
+      }
+    };
+    fetchFamily();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -39,7 +54,7 @@ export default function Layout() {
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h1 className="text-xl font-bold">Rayees Family</h1>
+            <h1 className="text-xl font-bold">{familyName}</h1>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">

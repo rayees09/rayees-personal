@@ -23,7 +23,14 @@ async def get_tasks(
     db: Session = Depends(get_db)
 ):
     """Get tasks with optional filters."""
-    query = db.query(Task)
+    # Get all users in the current user's family
+    family_user_ids = db.query(User.id).filter(
+        User.family_id == current_user.family_id
+    ).all()
+    family_user_ids = [uid[0] for uid in family_user_ids]
+
+    # Filter tasks assigned to family members only
+    query = db.query(Task).filter(Task.assigned_to.in_(family_user_ids))
 
     if assigned_to:
         query = query.filter(Task.assigned_to == assigned_to)
@@ -66,6 +73,11 @@ async def create_task(
     db: Session = Depends(get_db)
 ):
     """Create a new task."""
+    # Verify the assignee is in the same family
+    assignee = db.query(User).filter(User.id == task_data.assigned_to).first()
+    if not assignee or assignee.family_id != current_user.family_id:
+        raise HTTPException(status_code=400, detail="Invalid assignee - must be a family member")
+
     task = Task(
         title=task_data.title,
         description=task_data.description,
@@ -109,7 +121,11 @@ async def update_task(
     db: Session = Depends(get_db)
 ):
     """Update a task."""
-    task = db.query(Task).filter(Task.id == task_id).first()
+    # Verify task belongs to a family member
+    task = db.query(Task).join(User, Task.assigned_to == User.id).filter(
+        Task.id == task_id,
+        User.family_id == current_user.family_id
+    ).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -146,7 +162,11 @@ async def complete_task(
     db: Session = Depends(get_db)
 ):
     """Mark a task as completed and award points."""
-    task = db.query(Task).filter(Task.id == task_id).first()
+    # Verify task belongs to a family member
+    task = db.query(Task).join(User, Task.assigned_to == User.id).filter(
+        Task.id == task_id,
+        User.family_id == current_user.family_id
+    ).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -195,7 +215,11 @@ async def verify_task(
     if current_user.role != UserRole.PARENT:
         raise HTTPException(status_code=403, detail="Only parents can verify tasks")
 
-    task = db.query(Task).filter(Task.id == task_id).first()
+    # Verify task belongs to a family member
+    task = db.query(Task).join(User, Task.assigned_to == User.id).filter(
+        Task.id == task_id,
+        User.family_id == current_user.family_id
+    ).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -230,7 +254,11 @@ async def delete_task(
     db: Session = Depends(get_db)
 ):
     """Delete a task."""
-    task = db.query(Task).filter(Task.id == task_id).first()
+    # Verify task belongs to a family member
+    task = db.query(Task).join(User, Task.assigned_to == User.id).filter(
+        Task.id == task_id,
+        User.family_id == current_user.family_id
+    ).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -276,8 +304,11 @@ async def get_rewards(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all available rewards."""
-    rewards = db.query(Reward).filter(Reward.is_available == True).all()
+    """Get all available rewards for the family."""
+    rewards = db.query(Reward).filter(
+        Reward.family_id == current_user.family_id,
+        Reward.is_available == True
+    ).all()
     return rewards
 
 
@@ -292,6 +323,7 @@ async def create_reward(
         raise HTTPException(status_code=403, detail="Only parents can create rewards")
 
     reward = Reward(
+        family_id=current_user.family_id,
         name=reward_data.name,
         description=reward_data.description,
         points_required=reward_data.points_required,
@@ -311,7 +343,10 @@ async def redeem_reward(
     db: Session = Depends(get_db)
 ):
     """Redeem a reward using points."""
-    reward = db.query(Reward).filter(Reward.id == reward_id).first()
+    reward = db.query(Reward).filter(
+        Reward.id == reward_id,
+        Reward.family_id == current_user.family_id
+    ).first()
     if not reward:
         raise HTTPException(status_code=404, detail="Reward not found")
 

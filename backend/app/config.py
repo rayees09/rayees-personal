@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     debug: bool = True
     upload_dir: str = "uploads"
 
+    # Frontend URL (for email links)
+    frontend_url: str = "http://localhost:5173"
+
     class Config:
         # Use absolute path to .env file
         env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")

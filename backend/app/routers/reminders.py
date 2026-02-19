@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, cast, String
+from sqlalchemy.dialects.postgresql import JSONB
 from typing import List, Optional
 from datetime import date, datetime, time, timedelta
 from pydantic import BaseModel
@@ -79,6 +80,7 @@ async def create_reminder(
 ):
     """Create a family reminder."""
     reminder = FamilyReminder(
+        family_id=current_user.family_id,
         title=reminder_data.title,
         description=reminder_data.description,
         remind_at=reminder_data.remind_at,
@@ -104,13 +106,17 @@ async def get_reminders(
     db: Session = Depends(get_db)
 ):
     """Get all reminders visible to the current user."""
-    query = db.query(FamilyReminder)
+    # Filter by family first
+    query = db.query(FamilyReminder).filter(
+        FamilyReminder.family_id == current_user.family_id
+    )
 
     # Filter by user (reminders for all OR specifically for this user)
+    # Use text cast to check if user ID is in the JSON array
     query = query.filter(
         or_(
             FamilyReminder.for_users == None,
-            FamilyReminder.for_users.contains([current_user.id])
+            cast(FamilyReminder.for_users, String).like(f'%{current_user.id}%')
         )
     )
 
@@ -136,12 +142,13 @@ async def get_upcoming_reminders(
     end_date = now + timedelta(days=days)
 
     reminders = db.query(FamilyReminder).filter(
+        FamilyReminder.family_id == current_user.family_id,
         FamilyReminder.is_completed == False,
         FamilyReminder.remind_at >= now,
         FamilyReminder.remind_at <= end_date,
         or_(
             FamilyReminder.for_users == None,
-            FamilyReminder.for_users.contains([current_user.id])
+            cast(FamilyReminder.for_users, String).like(f'%{current_user.id}%')
         )
     ).order_by(FamilyReminder.remind_at.asc()).all()
 
@@ -155,7 +162,10 @@ async def complete_reminder(
     db: Session = Depends(get_db)
 ):
     """Mark a reminder as completed."""
-    reminder = db.query(FamilyReminder).filter(FamilyReminder.id == reminder_id).first()
+    reminder = db.query(FamilyReminder).filter(
+        FamilyReminder.id == reminder_id,
+        FamilyReminder.family_id == current_user.family_id
+    ).first()
     if not reminder:
         raise HTTPException(status_code=404, detail="Reminder not found")
 
@@ -166,6 +176,7 @@ async def complete_reminder(
     if reminder.is_recurring and reminder.recurrence_pattern:
         next_remind_at = _get_next_occurrence(reminder.remind_at, reminder.recurrence_pattern)
         new_reminder = FamilyReminder(
+            family_id=reminder.family_id,
             title=reminder.title,
             description=reminder.description,
             remind_at=next_remind_at,
@@ -190,7 +201,10 @@ async def delete_reminder(
     db: Session = Depends(get_db)
 ):
     """Delete a reminder."""
-    reminder = db.query(FamilyReminder).filter(FamilyReminder.id == reminder_id).first()
+    reminder = db.query(FamilyReminder).filter(
+        FamilyReminder.id == reminder_id,
+        FamilyReminder.family_id == current_user.family_id
+    ).first()
     if not reminder:
         raise HTTPException(status_code=404, detail="Reminder not found")
 
