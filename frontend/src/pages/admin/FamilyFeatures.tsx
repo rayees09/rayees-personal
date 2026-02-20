@@ -11,8 +11,10 @@ interface FamilyDetails {
   };
   features: Record<string, boolean>;
   ai_limit: {
-    monthly_limit: number;
-    current_usage: number;
+    monthly_token_limit: number;
+    current_month_usage: number;
+    monthly_cost_limit_usd: number;
+    current_month_cost_usd: number;
   } | null;
 }
 
@@ -36,6 +38,7 @@ export default function FamilyFeatures() {
   const [details, setDetails] = useState<FamilyDetails | null>(null);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [aiLimit, setAiLimit] = useState<number>(100000);
+  const [costLimitCents, setCostLimitCents] = useState<number>(20); // 20 cents default
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -54,7 +57,9 @@ export default function FamilyFeatures() {
       const response = await api.get(`/admin/families/${familyId}`);
       setDetails(response.data);
       setFeatures(response.data.features || {});
-      setAiLimit(response.data.ai_limit?.monthly_limit || 100000);
+      setAiLimit(response.data.ai_limit?.monthly_token_limit || 100000);
+      // Convert USD to cents for easier editing
+      setCostLimitCents(Math.round((response.data.ai_limit?.monthly_cost_limit_usd || 0.20) * 100));
     } catch (err) {
       console.error('Failed to fetch family details:', err);
     } finally {
@@ -76,8 +81,11 @@ export default function FamilyFeatures() {
       // Save features
       await api.put(`/admin/families/${familyId}/features`, { features });
 
-      // Save AI limit
-      await api.put(`/admin/families/${familyId}/ai-limits?monthly_token_limit=${aiLimit}`);
+      // Save AI limits (convert cents to USD)
+      await api.put(`/admin/families/${familyId}/ai-limits`, {
+        monthly_token_limit: aiLimit,
+        monthly_cost_limit_usd: costLimitCents / 100
+      });
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -158,10 +166,57 @@ export default function FamilyFeatures() {
 
         {/* AI Limits */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-white font-semibold mb-4">AI Token Limits</h2>
-          <div className="space-y-4">
+          <h2 className="text-white font-semibold mb-4">AI Usage Limits</h2>
+          <div className="space-y-6">
+            {/* Cost Limit (Primary) */}
             <div>
-              <label className="block text-gray-400 text-sm mb-2">Monthly Token Limit</label>
+              <label className="block text-gray-400 text-sm mb-2">Monthly Cost Limit (cents)</label>
+              <input
+                type="number"
+                value={costLimitCents}
+                onChange={(e) => { setCostLimitCents(parseInt(e.target.value) || 0); setSaved(false); }}
+                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+              />
+              <p className="text-gray-500 text-xs mt-1">
+                Current usage: ${(details.ai_limit?.current_month_cost_usd || 0).toFixed(4)} / ${(costLimitCents / 100).toFixed(2)}
+              </p>
+            </div>
+            <div className="flex items-center gap-4 text-sm">
+              <button
+                onClick={() => { setCostLimitCents(10); setSaved(false); }}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+              >
+                10¢
+              </button>
+              <button
+                onClick={() => { setCostLimitCents(20); setSaved(false); }}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+              >
+                20¢
+              </button>
+              <button
+                onClick={() => { setCostLimitCents(50); setSaved(false); }}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+              >
+                50¢
+              </button>
+              <button
+                onClick={() => { setCostLimitCents(100); setSaved(false); }}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+              >
+                $1
+              </button>
+              <button
+                onClick={() => { setCostLimitCents(500); setSaved(false); }}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+              >
+                $5
+              </button>
+            </div>
+
+            {/* Token Limit (Secondary) */}
+            <div className="pt-4 border-t border-gray-700">
+              <label className="block text-gray-400 text-sm mb-2">Monthly Token Limit (backup)</label>
               <input
                 type="number"
                 value={aiLimit}
@@ -169,34 +224,8 @@ export default function FamilyFeatures() {
                 className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
               />
               <p className="text-gray-500 text-xs mt-1">
-                Current usage: {details.ai_limit?.current_usage?.toLocaleString() || 0} tokens
+                Current usage: {(details.ai_limit?.current_month_usage || 0).toLocaleString()} tokens
               </p>
-            </div>
-            <div className="flex items-center gap-4 text-sm">
-              <button
-                onClick={() => { setAiLimit(50000); setSaved(false); }}
-                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
-              >
-                50K
-              </button>
-              <button
-                onClick={() => { setAiLimit(100000); setSaved(false); }}
-                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
-              >
-                100K
-              </button>
-              <button
-                onClick={() => { setAiLimit(500000); setSaved(false); }}
-                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
-              >
-                500K
-              </button>
-              <button
-                onClick={() => { setAiLimit(1000000); setSaved(false); }}
-                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
-              >
-                1M
-              </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Cpu, DollarSign, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Cpu, DollarSign, TrendingUp, Settings, Save, CheckCircle } from 'lucide-react';
 import api from '../../services/api';
 
 interface UsageStats {
@@ -12,6 +12,9 @@ export default function TokenUsage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [defaultCostLimitCents, setDefaultCostLimitCents] = useState<number>(20);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     const adminToken = localStorage.getItem('adminToken');
@@ -20,6 +23,7 @@ export default function TokenUsage() {
       return;
     }
     fetchStats();
+    fetchDefaultSettings();
   }, [navigate]);
 
   const fetchStats = async () => {
@@ -33,6 +37,32 @@ export default function TokenUsage() {
       console.error('Failed to fetch stats:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDefaultSettings = async () => {
+    try {
+      const response = await api.get('/admin/settings/default_ai_cost_limit_cents');
+      setDefaultCostLimitCents(parseInt(response.data.value) || 20);
+    } catch (err) {
+      // Setting might not exist yet, use default
+      console.log('Default setting not found, using 20 cents');
+    }
+  };
+
+  const handleSaveDefault = async () => {
+    setSaving(true);
+    try {
+      await api.put('/admin/settings/default_ai_cost_limit_cents', {
+        value: defaultCostLimitCents.toString()
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to save default:', err);
+      alert('Failed to save setting');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -104,6 +134,87 @@ export default function TokenUsage() {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Global Default Settings */}
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Settings className="w-5 h-5 text-purple-400" />
+            <h2 className="text-white font-semibold">Global Default Settings</h2>
+          </div>
+
+          {saved && (
+            <div className="flex items-center gap-2 p-3 bg-green-900/50 text-green-300 rounded-lg mb-4">
+              <CheckCircle size={16} />
+              Setting saved successfully!
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-gray-400 text-sm mb-2">
+                Default Monthly Cost Limit for New Families (cents)
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="number"
+                  value={defaultCostLimitCents}
+                  onChange={(e) => setDefaultCostLimitCents(parseInt(e.target.value) || 0)}
+                  className="w-32 bg-gray-700 text-white px-4 py-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+                <span className="text-gray-400">= ${(defaultCostLimitCents / 100).toFixed(2)}</span>
+              </div>
+              <p className="text-gray-500 text-xs mt-2">
+                This limit is applied to new families when they register.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setDefaultCostLimitCents(10)}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 text-sm"
+              >
+                10¢
+              </button>
+              <button
+                onClick={() => setDefaultCostLimitCents(20)}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 text-sm"
+              >
+                20¢
+              </button>
+              <button
+                onClick={() => setDefaultCostLimitCents(50)}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 text-sm"
+              >
+                50¢
+              </button>
+              <button
+                onClick={() => setDefaultCostLimitCents(100)}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 text-sm"
+              >
+                $1
+              </button>
+              <button
+                onClick={() => setDefaultCostLimitCents(500)}
+                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 text-sm"
+              >
+                $5
+              </button>
+            </div>
+
+            <button
+              onClick={handleSaveDefault}
+              disabled={saving}
+              className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving ? 'Saving...' : (
+                <>
+                  <Save size={16} />
+                  Save Default
+                </>
+              )}
+            </button>
           </div>
         </div>
 

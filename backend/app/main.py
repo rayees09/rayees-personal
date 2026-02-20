@@ -7,7 +7,7 @@ from app.config import settings
 from app.database import engine, Base
 from app.routers import auth, tasks, islamic, learning
 from app.routers import quran_goals, reminders, expenses, ai_context
-from app.routers import admin, family
+from app.routers import admin, family, support
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -44,6 +44,7 @@ app.include_router(expenses.router)
 app.include_router(ai_context.router)
 app.include_router(admin.router)
 app.include_router(family.router)
+app.include_router(support.router)
 
 
 @app.get("/")

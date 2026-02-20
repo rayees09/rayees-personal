@@ -50,6 +50,12 @@ class UserLogin(BaseModel):
     password: Optional[str] = None
 
 
+class GoogleLoginRequest(BaseModel):
+    credential: str  # Google ID token
+    family_name: Optional[str] = None  # For new registrations
+    country: Optional[str] = None  # For new registrations
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

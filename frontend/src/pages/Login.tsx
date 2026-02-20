@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../services/api';
 import { Mail, User, ArrowLeft } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -57,6 +58,21 @@ export default function Login() {
     }
   };
 
+  const handleGoogleLogin = async (credential: string) => {
+    setError('');
+    setLoading(true);
+
+    try {
+      const data = await authApi.loginWithGoogle(credential);
+      login(data.access_token, data.user);
+      navigate('/');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Google login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-islamic-green to-teal-800 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -70,6 +86,40 @@ export default function Login() {
           {mode === 'select' && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-center mb-6">How would you like to login?</h2>
+
+              {/* Google Login */}
+              <div className="flex justify-center">
+                <GoogleLogin
+                  onSuccess={(credentialResponse) => {
+                    if (credentialResponse.credential) {
+                      handleGoogleLogin(credentialResponse.credential);
+                    }
+                  }}
+                  onError={() => {
+                    setError('Google login failed. Please try again.');
+                  }}
+                  text="signin_with"
+                  shape="rectangular"
+                  theme="outline"
+                  size="large"
+                  width="320"
+                />
+              </div>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-4 bg-white text-gray-500">or</span>
+                </div>
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-600 text-sm text-center">{error}</p>
+                </div>
+              )}
 
               <button
                 onClick={() => setMode('parent')}

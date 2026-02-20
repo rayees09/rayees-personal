@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Users, Home, DollarSign, Cpu, Settings, LogOut,
-  Activity, Mail, ToggleLeft, Shield
+  Activity, Mail, ToggleLeft, Shield, MessageSquare, ScrollText
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -144,6 +144,18 @@ export default function AdminDashboard() {
             description="Manage admin users"
             icon={<Shield className="w-8 h-8" />}
             href="/admin/admins"
+          />
+          <ActionCard
+            title="Support Issues"
+            description="View and manage user reports"
+            icon={<MessageSquare className="w-8 h-8" />}
+            href="/admin/issues"
+          />
+          <ActionCard
+            title="Activity Logs"
+            description="Track user activities & locations"
+            icon={<ScrollText className="w-8 h-8" />}
+            href="/admin/activity-logs"
           />
         </div>
 

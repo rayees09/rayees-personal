@@ -9,6 +9,7 @@ import os
 from app.database import get_db
 from app.models.admin import Admin, EmailConfig, EmailProvider
 from app.models.family import Family, FamilyFeature, FamilyAiLimit, AVAILABLE_FEATURES
+from app.models.assistant import AppSettings
 from app.models.token_usage import AiTokenUsage
 from app.models.user import User
 from app.services.auth import get_password_hash, verify_password, create_access_token
@@ -25,18 +26,66 @@ router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 # ============== ADMIN AUTH ==============
 
+from fastapi import Header
+from jose import jwt, JWTError
+from app.config import settings
+
+
 async def get_current_admin(
-    token: str = Depends(lambda: None),  # TODO: Implement proper admin token extraction
+    authorization: str = Header(None, alias="Authorization"),
     db: Session = Depends(get_db)
 ) -> Admin:
-    """Get current admin from token."""
-    # For now, check if the request has admin authorization
-    # This should be implemented with proper JWT validation
-    # Placeholder implementation
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Admin authentication required"
-    )
+    """Get current admin from JWT token."""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin authentication required"
+        )
+
+    # Extract token from "Bearer <token>" format
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication scheme"
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header"
+        )
+
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        admin_id = payload.get("sub")
+        is_admin = payload.get("is_admin", False)
+
+        if not admin_id or not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid admin token"
+            )
+
+        admin = db.query(Admin).filter(Admin.id == int(admin_id)).first()
+        if not admin:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Admin not found"
+            )
+
+        if not admin.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin account is disabled"
+            )
+
+        return admin
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
 
 
 @router.post("/login", response_model=AdminLoginResponse)
@@ -122,6 +171,7 @@ async def create_first_admin(
 
 @router.get("/dashboard", response_model=DashboardStats)
 async def get_dashboard_stats(
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Get dashboard statistics."""
@@ -162,6 +212,8 @@ async def list_families(
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
+    country: Optional[str] = None,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """List all families with pagination."""
@@ -175,6 +227,9 @@ async def list_families(
 
     if is_active is not None:
         query = query.filter(Family.is_active == is_active)
+
+    if country:
+        query = query.filter(Family.country == country)
 
     total = query.count()
 
@@ -195,6 +250,7 @@ async def list_families(
             name=f.name,
             slug=f.slug,
             owner_email=f.owner_email,
+            country=f.country,
             is_verified=f.is_verified,
             is_active=f.is_active,
             subscription_plan=f.subscription_plan,
@@ -215,6 +271,7 @@ async def list_families(
 @router.get("/families/{family_id}")
 async def get_family_details(
     family_id: int,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Get detailed information about a family."""
@@ -251,8 +308,10 @@ async def get_family_details(
         ],
         "features": {f.feature_key: f.is_enabled for f in features},
         "ai_limit": {
-            "monthly_limit": ai_limit.monthly_token_limit if ai_limit else 100000,
-            "current_usage": ai_limit.current_month_usage if ai_limit else 0,
+            "monthly_token_limit": ai_limit.monthly_token_limit if ai_limit else 100000,
+            "current_month_usage": ai_limit.current_month_usage if ai_limit else 0,
+            "monthly_cost_limit_usd": ai_limit.monthly_cost_limit_usd if ai_limit else 0.20,
+            "current_month_cost_usd": ai_limit.current_month_cost_usd if ai_limit else 0.0,
             "reset_date": ai_limit.reset_date if ai_limit else None
         } if ai_limit else None
     }
@@ -262,6 +321,7 @@ async def get_family_details(
 async def update_family_status(
     family_id: int,
     is_active: bool,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Activate or deactivate a family."""
@@ -281,6 +341,7 @@ async def update_family_status(
 @router.put("/families/{family_id}/verify")
 async def verify_family_directly(
     family_id: int,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Admin: Directly verify a family (bypass email verification)."""
@@ -312,6 +373,7 @@ async def verify_family_directly(
 @router.put("/users/{user_id}/verify")
 async def verify_user_directly(
     user_id: int,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Admin: Directly verify a user's email (bypass email verification)."""
@@ -334,6 +396,7 @@ async def verify_user_directly(
 async def update_family_features(
     family_id: int,
     data: FamilyFeaturesUpdate,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update feature flags for a family."""
@@ -366,13 +429,20 @@ async def update_family_features(
     return {"message": "Features updated successfully"}
 
 
+class AiLimitUpdateRequest(BaseModel):
+    monthly_token_limit: Optional[int] = None
+    monthly_cost_limit_usd: Optional[float] = None
+    reset_usage: bool = False
+
+
 @router.put("/families/{family_id}/ai-limits")
 async def update_family_ai_limits(
     family_id: int,
-    monthly_token_limit: int,
+    data: AiLimitUpdateRequest,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Update AI token limits for a family."""
+    """Update AI token/cost limits for a family."""
     family = db.query(Family).filter(Family.id == family_id).first()
     if not family:
         raise HTTPException(
@@ -382,23 +452,47 @@ async def update_family_ai_limits(
 
     ai_limit = db.query(FamilyAiLimit).filter(FamilyAiLimit.family_id == family_id).first()
     if ai_limit:
-        ai_limit.monthly_token_limit = monthly_token_limit
+        if data.monthly_token_limit is not None:
+            ai_limit.monthly_token_limit = data.monthly_token_limit
+        if data.monthly_cost_limit_usd is not None:
+            ai_limit.monthly_cost_limit_usd = data.monthly_cost_limit_usd
+        if data.reset_usage:
+            ai_limit.current_month_usage = 0
+            ai_limit.current_month_cost_usd = 0.0
     else:
+        # Get default cost limit from app settings if not provided
+        default_cost_usd = 0.20
+        if data.monthly_cost_limit_usd is None:
+            default_cost_setting = db.query(AppSettings).filter(
+                AppSettings.key == "default_ai_cost_limit_cents"
+            ).first()
+            if default_cost_setting and default_cost_setting.value:
+                default_cost_usd = int(default_cost_setting.value) / 100
+
         ai_limit = FamilyAiLimit(
             family_id=family_id,
-            monthly_token_limit=monthly_token_limit,
-            current_month_usage=0
+            monthly_token_limit=data.monthly_token_limit or 100000,
+            monthly_cost_limit_usd=data.monthly_cost_limit_usd if data.monthly_cost_limit_usd is not None else default_cost_usd,
+            current_month_usage=0,
+            current_month_cost_usd=0.0
         )
         db.add(ai_limit)
 
     db.commit()
 
-    return {"message": "AI limits updated successfully"}
+    return {
+        "message": "AI limits updated successfully",
+        "monthly_token_limit": ai_limit.monthly_token_limit,
+        "monthly_cost_limit_usd": ai_limit.monthly_cost_limit_usd,
+        "current_month_usage": ai_limit.current_month_usage,
+        "current_month_cost_usd": ai_limit.current_month_cost_usd
+    }
 
 
 @router.get("/families/{family_id}/usage", response_model=TokenUsageSummary)
 async def get_family_usage(
     family_id: int,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Get detailed AI usage for a family."""
@@ -471,6 +565,7 @@ async def get_family_usage(
 
 @router.get("/email-config", response_model=EmailConfigResponse)
 async def get_email_config(
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Get current email configuration."""
@@ -496,6 +591,7 @@ async def get_email_config(
 @router.put("/email-config", response_model=EmailConfigResponse)
 async def update_email_config(
     data: EmailConfigUpdateRequest,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update email configuration."""
@@ -559,6 +655,7 @@ class EmailTestWithConfigRequest(BaseModel):
 @router.post("/email-config/test")
 async def test_email_config(
     data: EmailTestWithConfigRequest,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Send a test email using provided config."""
@@ -709,6 +806,7 @@ class AdminListItem(BaseModel):
 
 @router.get("/admins", response_model=List[AdminListItem])
 async def list_admins(
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """List all admin accounts."""
@@ -728,6 +826,7 @@ async def list_admins(
 @router.post("/admins", response_model=AdminListItem)
 async def create_admin(
     data: AdminCreateRequest,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new admin account."""
@@ -763,6 +862,7 @@ async def create_admin(
 async def update_admin(
     admin_id: int,
     data: AdminUpdateRequest,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update an admin account."""
@@ -808,6 +908,7 @@ async def update_admin(
 @router.delete("/admins/{admin_id}")
 async def delete_admin(
     admin_id: int,
+    admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Delete an admin account."""
@@ -830,3 +931,56 @@ async def delete_admin(
     db.commit()
 
     return {"message": "Admin deleted successfully"}
+
+
+# ============== APP SETTINGS ==============
+
+class AppSettingUpdateRequest(BaseModel):
+    value: str
+
+
+@router.get("/settings")
+async def get_app_settings(
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Get all application settings."""
+    app_settings = db.query(AppSettings).all()
+    return {s.key: s.value for s in app_settings}
+
+
+@router.get("/settings/{key}")
+async def get_app_setting(
+    key: str,
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Get a specific application setting."""
+    setting = db.query(AppSettings).filter(AppSettings.key == key).first()
+    if not setting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Setting '{key}' not found"
+        )
+    return {"key": setting.key, "value": setting.value}
+
+
+@router.put("/settings/{key}")
+async def update_app_setting(
+    key: str,
+    data: AppSettingUpdateRequest,
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Update or create an application setting."""
+    setting = db.query(AppSettings).filter(AppSettings.key == key).first()
+    if setting:
+        setting.value = data.value
+    else:
+        setting = AppSettings(key=key, value=data.value)
+        db.add(setting)
+
+    db.commit()
+    db.refresh(setting)
+
+    return {"key": setting.key, "value": setting.value, "message": "Setting updated successfully"}

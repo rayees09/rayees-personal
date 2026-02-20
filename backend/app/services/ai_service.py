@@ -2,7 +2,15 @@ import json
 import base64
 from typing import Optional, Dict, Any, List
 from openai import OpenAI
+from sqlalchemy.orm import Session
 from app.config import settings
+from app.models.token_usage import AiTokenUsage, calculate_cost
+from app.models.family import FamilyAiLimit
+
+
+class TokenLimitExceededError(Exception):
+    """Raised when family has exceeded their monthly token limit."""
+    pass
 
 
 class AIService:
@@ -11,13 +19,78 @@ class AIService:
         if settings.openai_api_key:
             self.client = OpenAI(api_key=settings.openai_api_key)
 
+    def _check_token_limit(self, db: Session, family_id: int) -> None:
+        """Check if family has exceeded their monthly cost limit."""
+        if not db or not family_id:
+            return
+
+        ai_limit = db.query(FamilyAiLimit).filter(
+            FamilyAiLimit.family_id == family_id
+        ).first()
+
+        if ai_limit:
+            current_cost = ai_limit.current_month_cost_usd or 0.0
+            cost_limit = ai_limit.monthly_cost_limit_usd or 0.20
+            if current_cost >= cost_limit:
+                raise TokenLimitExceededError(
+                    "AI features disabled due to high usage. Please contact support to increase your limit."
+                )
+
+    def _log_token_usage(
+        self,
+        db: Session,
+        model: str,
+        feature: str,
+        response,
+        family_id: int = None,
+        user_id: int = None
+    ):
+        """Log token usage to database and update family's monthly usage."""
+        if not db or not response.usage:
+            return
+
+        total_tokens = response.usage.total_tokens
+        cost = calculate_cost(model, response.usage.prompt_tokens, response.usage.completion_tokens)
+
+        # Log the usage record
+        usage = AiTokenUsage(
+            family_id=family_id,
+            user_id=user_id,
+            feature_used=feature,
+            model_used=model,
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens,
+            total_tokens=total_tokens,
+            cost_usd=cost
+        )
+        db.add(usage)
+
+        # Update family's monthly usage (both tokens and cost)
+        if family_id:
+            ai_limit = db.query(FamilyAiLimit).filter(
+                FamilyAiLimit.family_id == family_id
+            ).first()
+            if ai_limit:
+                ai_limit.current_month_usage += total_tokens
+                ai_limit.current_month_cost_usd = (ai_limit.current_month_cost_usd or 0.0) + cost
+
+        db.commit()
+
     def _ensure_client(self):
         if not self.client:
             raise ValueError("OpenAI API key not configured. Please set OPENAI_API_KEY in .env")
 
-    async def analyze_homework(self, image_base64: str, grade_level: str = "6th") -> Dict[str, Any]:
+    async def analyze_homework(
+        self,
+        image_base64: str,
+        grade_level: str = "6th",
+        db: Session = None,
+        family_id: int = None,
+        user_id: int = None
+    ) -> Dict[str, Any]:
         """Analyze homework image and extract questions, answers, and grades."""
         self._ensure_client()
+        self._check_token_limit(db, family_id)
 
         prompt = f"""Analyze this homework image for a {grade_level} grade student.
 
@@ -47,8 +120,9 @@ Please provide a detailed analysis in the following JSON format:
 
 Be encouraging but accurate. Identify specific topics and skills being tested."""
 
+        model = "gpt-4o"
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[
                 {
                     "role": "user",
@@ -65,6 +139,9 @@ Be encouraging but accurate. Identify specific topics and skills being tested.""
             ],
             max_tokens=2000
         )
+
+        # Log token usage
+        self._log_token_usage(db, model, "homework_analysis", response, family_id, user_id)
 
         content = response.choices[0].message.content
 
@@ -91,10 +168,14 @@ Be encouraging but accurate. Identify specific topics and skills being tested.""
         subject: str,
         difficulty: str = "medium",
         question_count: int = 10,
-        grade_level: str = "6th"
+        grade_level: str = "6th",
+        db: Session = None,
+        family_id: int = None,
+        user_id: int = None
     ) -> Dict[str, Any]:
         """Generate a practice worksheet for a specific topic."""
         self._ensure_client()
+        self._check_token_limit(db, family_id)
 
         prompt = f"""Generate a practice worksheet for a {grade_level} grade student.
 
@@ -129,11 +210,15 @@ For {difficulty} difficulty:
 - medium: application and some analysis
 - hard: analysis and problem-solving"""
 
+        model = "gpt-4o"
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=3000
         )
+
+        # Log token usage
+        self._log_token_usage(db, model, "worksheet_generation", response, family_id, user_id)
 
         content = response.choices[0].message.content
 
@@ -148,9 +233,17 @@ For {difficulty} difficulty:
 
         return {"raw_response": content, "parse_error": True}
 
-    async def grade_worksheet(self, image_base64: str, answer_key: List[Dict]) -> Dict[str, Any]:
+    async def grade_worksheet(
+        self,
+        image_base64: str,
+        answer_key: List[Dict],
+        db: Session = None,
+        family_id: int = None,
+        user_id: int = None
+    ) -> Dict[str, Any]:
         """Grade a completed worksheet by comparing to answer key."""
         self._ensure_client()
+        self._check_token_limit(db, family_id)
 
         answer_key_str = json.dumps(answer_key, indent=2)
 
@@ -182,8 +275,9 @@ Analyze the student's work in the image and provide grading in this JSON format:
 
 Be fair in grading - give partial credit where appropriate for work shown."""
 
+        model = "gpt-4o"
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[
                 {
                     "role": "user",
@@ -201,6 +295,9 @@ Be fair in grading - give partial credit where appropriate for work shown."""
             max_tokens=2000
         )
 
+        # Log token usage
+        self._log_token_usage(db, model, "worksheet_grading", response, family_id, user_id)
+
         content = response.choices[0].message.content
 
         try:
@@ -214,9 +311,16 @@ Be fair in grading - give partial credit where appropriate for work shown."""
 
         return {"raw_response": content, "parse_error": True}
 
-    async def extract_tasks_from_image(self, image_base64: str) -> Dict[str, Any]:
+    async def extract_tasks_from_image(
+        self,
+        image_base64: str,
+        db: Session = None,
+        family_id: int = None,
+        user_id: int = None
+    ) -> Dict[str, Any]:
         """Extract tasks from an image (homework assignment, schedule, etc.)."""
         self._ensure_client()
+        self._check_token_limit(db, family_id)
 
         prompt = """Analyze this image and extract any tasks, assignments, or to-do items.
 
@@ -239,8 +343,9 @@ Return the extracted information in this JSON format:
 
 Extract all visible tasks and assignments."""
 
+        model = "gpt-4o"
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[
                 {
                     "role": "user",
@@ -257,6 +362,9 @@ Extract all visible tasks and assignments."""
             ],
             max_tokens=1500
         )
+
+        # Log token usage
+        self._log_token_usage(db, model, "task_extraction", response, family_id, user_id)
 
         content = response.choices[0].message.content
 
@@ -276,10 +384,14 @@ Extract all visible tasks and assignments."""
         child_name: str,
         weak_areas: List[str],
         recent_scores: List[float],
-        subject: str
+        subject: str,
+        db: Session = None,
+        family_id: int = None,
+        user_id: int = None
     ) -> Dict[str, Any]:
         """Get AI-powered suggestions for parents to help their child."""
         self._ensure_client()
+        self._check_token_limit(db, family_id)
 
         prompt = f"""As an educational advisor, provide suggestions for a parent to help their child.
 
@@ -315,11 +427,15 @@ Provide suggestions in this JSON format:
 
 Be practical and age-appropriate. Focus on fun, engaging activities."""
 
+        model = "gpt-4o"
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1500
         )
+
+        # Log token usage
+        self._log_token_usage(db, model, "parent_suggestions", response, family_id, user_id)
 
         content = response.choices[0].message.content
 
@@ -334,9 +450,16 @@ Be practical and age-appropriate. Focus on fun, engaging activities."""
 
         return {"raw_response": content, "parse_error": True}
 
-    async def extract_quran_page_info(self, image_base64: str) -> Dict[str, Any]:
+    async def extract_quran_page_info(
+        self,
+        image_base64: str,
+        db: Session = None,
+        family_id: int = None,
+        user_id: int = None
+    ) -> Dict[str, Any]:
         """Extract Quran page information from an uploaded image."""
         self._ensure_client()
+        self._check_token_limit(db, family_id)
 
         prompt = """Analyze this image of a Quran page and extract the following information.
 
@@ -357,8 +480,9 @@ Return the information in this JSON format:
 
 If this is not a Quran page, set is_quran_page to false and pages_identified to false."""
 
+        model = "gpt-4o"
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[
                 {
                     "role": "user",
@@ -375,6 +499,9 @@ If this is not a Quran page, set is_quran_page to false and pages_identified to 
             ],
             max_tokens=500
         )
+
+        # Log token usage
+        self._log_token_usage(db, model, "quran_page_extraction", response, family_id, user_id)
 
         content = response.choices[0].message.content
 

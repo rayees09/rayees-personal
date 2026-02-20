@@ -1,19 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List
+import re
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.task import PointsLedger
-from app.schemas.user import UserCreate, UserResponse, UserLogin, Token, UserUpdate
+from app.models.family import Family, FamilyFeature, FamilyAiLimit, AVAILABLE_FEATURES
+from app.models.assistant import AppSettings
+from app.schemas.user import UserCreate, UserResponse, UserLogin, Token, UserUpdate, GoogleLoginRequest
 from app.services.auth import (
     get_password_hash, authenticate_user, authenticate_user_by_pin,
     authenticate_user_by_username, create_access_token, get_current_user
 )
 from app.config import settings
+from app.routers.support import log_activity
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -73,7 +79,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(login_data: UserLogin, db: Session = Depends(get_db)):
+async def login(login_data: UserLogin, request: Request, db: Session = Depends(get_db)):
     user = None
 
     # Try email/password login (for parents)
@@ -96,6 +102,165 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified. Please check your email for the verification link."
         )
+
+    # Get total points
+    total_points = db.query(func.sum(PointsLedger.points)).filter(
+        PointsLedger.user_id == user.id
+    ).scalar() or 0
+
+    access_token = create_access_token(data={"sub": user.id})
+
+    # Log activity
+    await log_activity(
+        db, "login", request,
+        user_id=user.id,
+        family_id=user.family_id,
+        details=f"Login via {'email' if login_data.email else 'username'}"
+    )
+
+    return Token(
+        access_token=access_token,
+        user=UserResponse(
+            id=user.id,
+            name=user.name,
+            email=user.email,
+            role=user.role,
+            dob=user.dob,
+            school=user.school,
+            grade=user.grade,
+            avatar=user.avatar,
+            created_at=user.created_at,
+            total_points=total_points
+        )
+    )
+
+
+@router.post("/login/google", response_model=Token)
+async def login_with_google(
+    data: GoogleLoginRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Login with Google OAuth."""
+    if not settings.google_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Google OAuth not configured"
+        )
+
+    try:
+        # Verify Google token
+        idinfo = id_token.verify_oauth2_token(
+            data.credential,
+            google_requests.Request(),
+            settings.google_client_id
+        )
+
+        email = idinfo.get('email')
+        name = idinfo.get('name', email.split('@')[0])
+
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email not provided by Google"
+            )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google token"
+        )
+
+    # Find user by email
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        # Auto-register: Create new family and user
+        # Use provided family_name or generate from user name
+        family_name_to_use = data.family_name if data.family_name else f"{name}'s Family"
+
+        # Generate slug from family name
+        base_slug = re.sub(r'[^a-zA-Z0-9\s-]', '', family_name_to_use.lower())
+        base_slug = re.sub(r'[\s_]+', '-', base_slug)[:50]
+        slug = base_slug
+        counter = 1
+        while db.query(Family).filter(Family.slug == slug).first():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+
+        # Create family
+        family = Family(
+            name=family_name_to_use,
+            slug=slug,
+            owner_email=email,
+            country=data.country,  # Save country
+            is_verified=True,  # Google verified the email
+            verified_at=datetime.utcnow(),
+            is_active=True
+        )
+        db.add(family)
+        db.flush()
+
+        # Create user as parent
+        user = User(
+            family_id=family.id,
+            name=name,
+            email=email,
+            role=UserRole.PARENT,
+            is_email_verified=True  # Google verified
+        )
+        db.add(user)
+
+        # Create default features
+        for feature in AVAILABLE_FEATURES:
+            ff = FamilyFeature(
+                family_id=family.id,
+                feature_key=feature["key"],
+                is_enabled=True
+            )
+            db.add(ff)
+
+        # Get default cost limit from app settings
+        default_cost_setting = db.query(AppSettings).filter(
+            AppSettings.key == "default_ai_cost_limit_cents"
+        ).first()
+        default_cost_limit_usd = 0.20  # Default fallback
+        if default_cost_setting and default_cost_setting.value:
+            default_cost_limit_usd = int(default_cost_setting.value) / 100
+
+        # Create default AI limit
+        ai_limit = FamilyAiLimit(
+            family_id=family.id,
+            monthly_token_limit=100000,
+            monthly_cost_limit_usd=default_cost_limit_usd,
+            current_month_usage=0,
+            current_month_cost_usd=0.0
+        )
+        db.add(ai_limit)
+
+        db.commit()
+        db.refresh(user)
+
+        # Log new registration
+        await log_activity(
+            db, "google_register", request,
+            user_id=user.id,
+            family_id=user.family_id,
+            details=f"New registration via Google: {name}"
+        )
+
+    # Mark email as verified since Google verified it
+    elif not user.is_email_verified:
+        user.is_email_verified = True
+        db.commit()
+
+    # Log Google login for existing user
+    await log_activity(
+        db, "google_login", request,
+        user_id=user.id,
+        family_id=user.family_id,
+        details=f"Login via Google"
+    )
 
     # Get total points
     total_points = db.query(func.sum(PointsLedger.points)).filter(

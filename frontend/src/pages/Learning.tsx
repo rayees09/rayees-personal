@@ -41,11 +41,22 @@ export default function Learning() {
       queryClient.invalidateQueries({ queryKey: ['homework'] });
       queryClient.invalidateQueries({ queryKey: ['proficiency'] });
       setUploadResult(data);
+      setUploadError(null);
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.detail || 'Failed to analyze homework. Please try again.';
+      setUploadError(message);
+      setUploadResult(null);
     },
   });
 
   const worksheetMutation = useMutation({
     mutationFn: learningApi.generateWorksheet,
+    onError: (error: any) => {
+      const message = error.response?.data?.detail || 'Failed to generate worksheet. Please try again.';
+      setWorksheetError(message);
+      setWorksheetResult(null);
+    },
   });
 
   const assignMutation = useMutation({
@@ -74,7 +85,9 @@ export default function Learning() {
   });
 
   const [uploadResult, setUploadResult] = useState<any>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [worksheetResult, setWorksheetResult] = useState<any>(null);
+  const [worksheetError, setWorksheetError] = useState<string | null>(null);
   const [showDetailedResults, setShowDetailedResults] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<string>('Math');
   const [customTopic, setCustomTopic] = useState('');
@@ -170,6 +183,8 @@ export default function Learning() {
   const topicSuggestions = topicsByGrade[gradeCategory] || topicsByGrade.middle;
 
   const handleFileUpload = (file: File) => {
+    setUploadError(null);
+    setUploadResult(null);
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_id', String(selectedUser));
@@ -178,6 +193,8 @@ export default function Learning() {
   };
 
   const handleGenerateWorksheet = (subject: string, topic: string) => {
+    setWorksheetError(null);
+    setWorksheetResult(null);
     worksheetMutation.mutate(
       {
         user_id: selectedUser,
@@ -187,7 +204,10 @@ export default function Learning() {
         question_count: 10,
       },
       {
-        onSuccess: (data) => setWorksheetResult(data),
+        onSuccess: (data) => {
+          setWorksheetResult(data);
+          setWorksheetError(null);
+        },
       }
     );
   };
@@ -269,6 +289,18 @@ export default function Learning() {
           {uploadMutation.isPending && (
             <div className="bg-blue-50 rounded-xl p-4 text-center">
               <p className="text-blue-700">Analyzing homework with AI...</p>
+            </div>
+          )}
+
+          {uploadError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
+                <div>
+                  <p className="font-medium text-red-800">Unable to analyze homework</p>
+                  <p className="text-sm text-red-600 mt-1">{uploadError}</p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -605,6 +637,8 @@ export default function Learning() {
             {/* Generate Button */}
             <button
               onClick={() => {
+                setWorksheetError(null);
+                setWorksheetResult(null);
                 const topic = customTopic || selectedTopic || 'General Practice';
                 worksheetMutation.mutate(
                   {
@@ -616,7 +650,10 @@ export default function Learning() {
                     grade_level: selectedChild?.grade || '6th',
                   },
                   {
-                    onSuccess: (data) => setWorksheetResult(data),
+                    onSuccess: (data) => {
+                      setWorksheetResult(data);
+                      setWorksheetError(null);
+                    },
                   }
                 );
               }}
@@ -630,6 +667,18 @@ export default function Learning() {
           {worksheetMutation.isPending && (
             <div className="bg-blue-50 rounded-xl p-4 text-center">
               <p className="text-blue-700">Generating worksheet with AI...</p>
+            </div>
+          )}
+
+          {worksheetError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
+                <div>
+                  <p className="font-medium text-red-800">Unable to generate worksheet</p>
+                  <p className="text-sm text-red-600 mt-1">{worksheetError}</p>
+                </div>
+              </div>
             </div>
           )}
 

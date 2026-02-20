@@ -9,7 +9,11 @@ const api = axios.create({
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  // Check for admin token for /admin/* and /support/admin/* routes
+  const adminToken = localStorage.getItem('adminToken');
+  const userToken = localStorage.getItem('token');
+  const isAdminRoute = config.url?.startsWith('/admin') || config.url?.includes('/admin/');
+  const token = isAdminRoute ? adminToken : (userToken || adminToken);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -39,6 +43,14 @@ export const authApi = {
   },
   loginWithUsername: async (username: string, password: string) => {
     const res = await api.post('/auth/login', { username, password });
+    return res.data;
+  },
+  loginWithGoogle: async (credential: string, familyName?: string, country?: string) => {
+    const res = await api.post('/auth/login/google', {
+      credential,
+      family_name: familyName,
+      country: country
+    });
     return res.data;
   },
   register: async (data: any) => {
@@ -454,6 +466,26 @@ export const aiApi = {
   },
   getContextText: async () => {
     const res = await api.get('/ai/context/text');
+    return res.data;
+  },
+};
+
+// Family API (for family settings and features)
+export const familyApi = {
+  getMe: async () => {
+    const res = await api.get('/family/me');
+    return res.data;
+  },
+  getFeatures: async () => {
+    const res = await api.get('/family/features');
+    return res.data;
+  },
+  getAvailableFeatures: async () => {
+    const res = await api.get('/family/available-features');
+    return res.data;
+  },
+  updateFeatures: async (features: Record<string, boolean>) => {
+    const res = await api.put('/family/features', features);
     return res.data;
   },
 };

@@ -84,6 +84,9 @@ export default function QuranGoal() {
   const handleImageUpload = (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (selectedUser) {
+      formData.append('user_id', selectedUser.toString());
+    }
     imageMutation.mutate(formData);
   };
 
@@ -91,6 +94,9 @@ export default function QuranGoal() {
     if (!manualPages) return;
     const formData = new FormData();
     formData.append('pages_read', manualPages);
+    if (selectedUser) {
+      formData.append('user_id', selectedUser.toString());
+    }
     logMutation.mutate(formData);
   };
 
@@ -105,6 +111,9 @@ export default function QuranGoal() {
     }
     const formData = new FormData();
     formData.append('pages_read', diff.toString());
+    if (selectedUser) {
+      formData.append('user_id', selectedUser.toString());
+    }
     logMutation.mutate(formData);
     setCurrentPageInput('');
   };

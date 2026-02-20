@@ -276,6 +276,14 @@ async def get_user_points(
     db: Session = Depends(get_db)
 ):
     """Get a user's points balance and history."""
+    # Validate user belongs to same family (SECURITY FIX)
+    target_user = db.query(User).filter(
+        User.id == user_id,
+        User.family_id == current_user.family_id
+    ).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found in your family")
+
     total = db.query(func.sum(PointsLedger.points)).filter(
         PointsLedger.user_id == user_id
     ).scalar() or 0

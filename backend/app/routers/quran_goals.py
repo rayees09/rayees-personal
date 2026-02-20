@@ -13,10 +13,24 @@ from app.database import get_db
 from app.models.user import User
 from app.models.islamic import QuranReadingGoal, QuranReadingLog, QURAN_TOTAL_PAGES
 from app.services.auth import get_current_user
-from app.services.ai_service import ai_service
+from app.services.ai_service import ai_service, TokenLimitExceededError
 from app.config import settings
 
 router = APIRouter(prefix="/api/quran-goals", tags=["Quran Reading Goals"])
+
+
+def validate_family_member(user_id: int, current_user: User, db: Session) -> User:
+    """Validate that user_id belongs to the current user's family."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.family_id == current_user.family_id
+    ).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found in your family"
+        )
+    return user
 
 
 # Schemas
@@ -121,6 +135,10 @@ async def get_active_goal(
     """Get the active Quran reading goal."""
     target_user = user_id or current_user.id
 
+    # Validate user belongs to same family if user_id specified (SECURITY FIX)
+    if user_id:
+        validate_family_member(user_id, current_user, db)
+
     goal = db.query(QuranReadingGoal).filter(
         QuranReadingGoal.user_id == target_user,
         QuranReadingGoal.is_completed == False
@@ -203,14 +221,24 @@ async def log_reading(
     end_page: Optional[int] = Form(None),
     surah_name: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
+    user_id: Optional[int] = Form(None),
     file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Log Quran reading progress. Optionally upload a page image."""
+    # Use provided user_id (for parent logging for child) or current user
+    target_user_id = user_id if user_id else current_user.id
+
+    # If logging for another user, verify they're in the same family
+    if user_id and user_id != current_user.id:
+        target_user = db.query(User).filter(User.id == user_id).first()
+        if not target_user or target_user.family_id != current_user.family_id:
+            raise HTTPException(status_code=403, detail="Cannot log for user outside your family")
+
     # Get active goal
     goal = db.query(QuranReadingGoal).filter(
-        QuranReadingGoal.user_id == current_user.id,
+        QuranReadingGoal.user_id == target_user_id,
         QuranReadingGoal.is_completed == False
     ).first()
 
@@ -231,12 +259,19 @@ async def log_reading(
 
             # Use AI to extract page info
             try:
-                result = await ai_service.extract_quran_page_info(image_data)
+                result = await ai_service.extract_quran_page_info(
+                    image_data,
+                    db=db,
+                    family_id=current_user.family_id,
+                    user_id=target_user_id
+                )
                 if result.get("pages_identified"):
                     pages_read = result.get("pages_count", 1)
                     start_page = result.get("start_page", start_page)
                     end_page = result.get("end_page", end_page)
                     surah_name = result.get("surah_name", surah_name)
+            except TokenLimitExceededError as e:
+                raise HTTPException(status_code=429, detail=str(e))
             except:
                 pass  # Continue with manual input
 
@@ -259,7 +294,7 @@ async def log_reading(
         # Create new log
         log = QuranReadingLog(
             goal_id=goal.id,
-            user_id=current_user.id,
+            user_id=target_user_id,
             date=today,
             pages_read=pages_read,
             start_page=start_page,
@@ -298,12 +333,22 @@ async def log_reading(
 @router.post("/log-image")
 async def log_reading_from_image(
     file: UploadFile = File(...),
+    user_id: Optional[int] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Upload Quran page image - AI will extract page number and log automatically."""
+    # Use provided user_id (for parent logging for child) or current user
+    target_user_id = user_id if user_id else current_user.id
+
+    # If logging for another user, verify they're in the same family
+    if user_id and user_id != current_user.id:
+        target_user = db.query(User).filter(User.id == user_id).first()
+        if not target_user or target_user.family_id != current_user.family_id:
+            raise HTTPException(status_code=403, detail="Cannot log for user outside your family")
+
     goal = db.query(QuranReadingGoal).filter(
-        QuranReadingGoal.user_id == current_user.id,
+        QuranReadingGoal.user_id == target_user_id,
         QuranReadingGoal.is_completed == False
     ).first()
 
@@ -316,7 +361,15 @@ async def log_reading_from_image(
         image_data = base64.b64encode(f.read()).decode()
 
     # Use AI to extract page info
-    result = await ai_service.extract_quran_page_info(image_data)
+    try:
+        result = await ai_service.extract_quran_page_info(
+            image_data,
+            db=db,
+            family_id=current_user.family_id,
+            user_id=target_user_id
+        )
+    except TokenLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
     pages_read = result.get("pages_count", 1)
     start_page = result.get("start_page")
@@ -341,7 +394,7 @@ async def log_reading_from_image(
     else:
         log = QuranReadingLog(
             goal_id=goal.id,
-            user_id=current_user.id,
+            user_id=target_user_id,
             date=today,
             pages_read=pages_read,
             start_page=start_page,
@@ -386,6 +439,10 @@ async def get_reading_logs(
 ):
     """Get all reading logs for the active goal."""
     target_user = user_id or current_user.id
+
+    # Validate user belongs to same family if user_id specified (SECURITY FIX)
+    if user_id:
+        validate_family_member(user_id, current_user, db)
 
     goal = db.query(QuranReadingGoal).filter(
         QuranReadingGoal.user_id == target_user,
@@ -490,6 +547,10 @@ async def get_reading_stats(
 ):
     """Get detailed reading statistics."""
     target_user = user_id or current_user.id
+
+    # Validate user belongs to same family if user_id specified (SECURITY FIX)
+    if user_id:
+        validate_family_member(user_id, current_user, db)
 
     goal = db.query(QuranReadingGoal).filter(
         QuranReadingGoal.user_id == target_user,

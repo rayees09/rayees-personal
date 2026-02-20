@@ -11,6 +11,7 @@ class FamilyRegisterRequest(BaseModel):
     owner_name: str
     owner_email: EmailStr
     password: str
+    country: str
 
 
 class FamilyRegisterResponse(BaseModel):
@@ -18,6 +19,7 @@ class FamilyRegisterResponse(BaseModel):
     family_id: int
     family_name: str
     owner_email: str
+    country: Optional[str] = None
     message: str
     requires_verification: bool = True
 

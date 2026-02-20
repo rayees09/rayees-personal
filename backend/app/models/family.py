@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, JSON, Date
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, JSON, Date, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -12,6 +12,7 @@ class Family(Base):
     name = Column(String(100), nullable=False)
     slug = Column(String(100), unique=True, index=True, nullable=False)
     owner_email = Column(String(255), nullable=False)
+    country = Column(String(100), nullable=True)
 
     # Verification
     is_verified = Column(Boolean, default=False)
@@ -48,13 +49,16 @@ class FamilyFeature(Base):
 
 
 class FamilyAiLimit(Base):
-    """Monthly AI token limits per family."""
+    """Monthly AI token/cost limits per family."""
     __tablename__ = "family_ai_limits"
 
     id = Column(Integer, primary_key=True, index=True)
     family_id = Column(Integer, ForeignKey("families.id"), unique=True, nullable=False)
     monthly_token_limit = Column(Integer, default=100000)  # Default 100k tokens/month
     current_month_usage = Column(Integer, default=0)
+    # Cost-based limits (default $0.20 = 20 cents)
+    monthly_cost_limit_usd = Column(Float, default=0.20)
+    current_month_cost_usd = Column(Float, default=0.0)
     reset_date = Column(Date, nullable=True)  # When to reset the counter
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

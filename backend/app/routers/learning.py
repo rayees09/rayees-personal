@@ -16,10 +16,24 @@ from app.schemas.learning import (
     QuestionResult
 )
 from app.services.auth import get_current_user
-from app.services.ai_service import ai_service
+from app.services.ai_service import ai_service, TokenLimitExceededError
 from app.config import settings
 
 router = APIRouter(prefix="/api/learning", tags=["Learning"])
+
+
+def validate_family_member(user_id: int, current_user: User, db: Session) -> User:
+    """Validate that user_id belongs to the current user's family."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.family_id == current_user.family_id
+    ).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found in your family"
+        )
+    return user
 
 
 def save_uploaded_file(file: UploadFile) -> str:
@@ -58,13 +72,21 @@ async def upload_homework(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
 
-    # Get user's grade level
-    user = db.query(User).filter(User.id == user_id).first()
-    grade_level = user.grade if user and user.grade else "6th"
+    # Validate user belongs to same family (SECURITY FIX)
+    user = validate_family_member(user_id, current_user, db)
+    grade_level = user.grade if user.grade else "6th"
 
     # Analyze with AI
     try:
-        analysis = await ai_service.analyze_homework(image_data, grade_level)
+        analysis = await ai_service.analyze_homework(
+            image_data,
+            grade_level,
+            db=db,
+            family_id=current_user.family_id,
+            user_id=user_id
+        )
+    except TokenLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except ValueError as e:
         # API key not configured
         raise HTTPException(status_code=500, detail=str(e))
@@ -178,6 +200,9 @@ async def get_homework_history(
     db: Session = Depends(get_db)
 ):
     """Get homework history for a user."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     homework = db.query(Homework).filter(
         Homework.user_id == user_id
     ).order_by(Homework.created_at.desc()).limit(limit).all()
@@ -208,8 +233,8 @@ async def generate_worksheet(
     db: Session = Depends(get_db)
 ):
     """Generate a practice worksheet using AI."""
-    # Get user's grade level
-    user = db.query(User).filter(User.id == request.user_id).first()
+    # Validate user belongs to same family (SECURITY FIX)
+    user = validate_family_member(request.user_id, current_user, db)
     grade_level = request.grade_level or (user.grade if user else "6th")
 
     topic_name = request.topic_name
@@ -219,13 +244,19 @@ async def generate_worksheet(
             topic_name = topic.name
 
     # Generate with AI
-    result = await ai_service.generate_worksheet(
-        topic=topic_name or "General",
-        subject=request.subject,
-        difficulty=request.difficulty,
-        question_count=request.question_count,
-        grade_level=grade_level
-    )
+    try:
+        result = await ai_service.generate_worksheet(
+            topic=topic_name or "General",
+            subject=request.subject,
+            difficulty=request.difficulty,
+            question_count=request.question_count,
+            grade_level=grade_level,
+            db=db,
+            family_id=current_user.family_id,
+            user_id=request.user_id
+        )
+    except TokenLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
     if result.get("parse_error"):
         raise HTTPException(status_code=500, detail="Failed to generate worksheet")
@@ -267,6 +298,9 @@ async def grade_worksheet(
     if not worksheet:
         raise HTTPException(status_code=404, detail="Worksheet not found")
 
+    # Validate worksheet belongs to family (SECURITY FIX)
+    validate_family_member(worksheet.user_id, current_user, db)
+
     # Save completed image
     filepath = save_uploaded_file(file)
     worksheet.completed_image_url = filepath
@@ -276,7 +310,16 @@ async def grade_worksheet(
         image_data = base64.b64encode(f.read()).decode()
 
     # Grade with AI
-    result = await ai_service.grade_worksheet(image_data, worksheet.answer_key)
+    try:
+        result = await ai_service.grade_worksheet(
+            image_data,
+            worksheet.answer_key,
+            db=db,
+            family_id=current_user.family_id,
+            user_id=worksheet.user_id
+        )
+    except TokenLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
     worksheet.ai_grading = result
     worksheet.score = result.get("score")
@@ -312,6 +355,9 @@ async def get_proficiency(
     db: Session = Depends(get_db)
 ):
     """Get proficiency scores for a user."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     query = db.query(Proficiency, Topic, Subject).join(
         Topic, Proficiency.topic_id == Topic.id
     ).join(
@@ -364,6 +410,9 @@ async def get_weak_areas(
     db: Session = Depends(get_db)
 ):
     """Get weak areas that need improvement."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     query = db.query(Proficiency, Topic, Subject).join(
         Topic, Proficiency.topic_id == Topic.id
     ).join(
@@ -401,7 +450,15 @@ async def extract_tasks_from_image(
     with open(filepath, "rb") as f:
         image_data = base64.b64encode(f.read()).decode()
 
-    result = await ai_service.extract_tasks_from_image(image_data)
+    try:
+        result = await ai_service.extract_tasks_from_image(
+            image_data,
+            db=db,
+            family_id=current_user.family_id,
+            user_id=current_user.id
+        )
+    except TokenLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
     return result
 
@@ -414,9 +471,8 @@ async def get_parent_suggestions(
     db: Session = Depends(get_db)
 ):
     """Get AI-powered suggestions for parents."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Validate user belongs to same family (SECURITY FIX)
+    user = validate_family_member(user_id, current_user, db)
 
     # Get weak areas
     weak_areas_query = db.query(Proficiency, Topic, Subject).join(
@@ -438,12 +494,18 @@ async def get_parent_suggestions(
 
     recent_scores = [h.score for h in recent_homework if h.score is not None]
 
-    result = await ai_service.get_parent_suggestions(
-        child_name=user.name,
-        weak_areas=weak_areas or ["General practice"],
-        recent_scores=recent_scores or [75],
-        subject=subject
-    )
+    try:
+        result = await ai_service.get_parent_suggestions(
+            child_name=user.name,
+            weak_areas=weak_areas or ["General practice"],
+            recent_scores=recent_scores or [75],
+            subject=subject,
+            db=db,
+            family_id=current_user.family_id,
+            user_id=user_id
+        )
+    except TokenLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
     return result
 
@@ -460,6 +522,11 @@ async def assign_worksheet(
     worksheet = db.query(Worksheet).filter(Worksheet.id == worksheet_id).first()
     if not worksheet:
         raise HTTPException(status_code=404, detail="Worksheet not found")
+
+    # Validate worksheet belongs to family (SECURITY FIX)
+    validate_family_member(worksheet.user_id, current_user, db)
+    # Validate assignee belongs to family (SECURITY FIX)
+    validate_family_member(assigned_to, current_user, db)
 
     worksheet.assigned_to = assigned_to
     worksheet.status = "assigned"
@@ -480,6 +547,9 @@ async def get_assigned_worksheets(
     db: Session = Depends(get_db)
 ):
     """Get worksheets assigned to a user."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     query = db.query(Worksheet).filter(Worksheet.assigned_to == user_id)
 
     if status:
@@ -518,6 +588,9 @@ async def get_worksheet(
     if not worksheet:
         raise HTTPException(status_code=404, detail="Worksheet not found")
 
+    # Validate worksheet belongs to family (SECURITY FIX)
+    validate_family_member(worksheet.user_id, current_user, db)
+
     # Hide answers if worksheet is assigned but not yet graded
     questions = worksheet.questions_json
     if worksheet.status in ["assigned", "in_progress", "submitted"]:
@@ -552,6 +625,9 @@ async def start_worksheet(
     if not worksheet:
         raise HTTPException(status_code=404, detail="Worksheet not found")
 
+    # Validate worksheet belongs to family (SECURITY FIX)
+    validate_family_member(worksheet.user_id, current_user, db)
+
     worksheet.status = "in_progress"
     db.commit()
 
@@ -570,6 +646,9 @@ async def submit_worksheet(
     if not worksheet:
         raise HTTPException(status_code=404, detail="Worksheet not found")
 
+    # Validate worksheet belongs to family (SECURITY FIX)
+    validate_family_member(worksheet.user_id, current_user, db)
+
     # Save completed image
     filepath = save_uploaded_file(file)
     worksheet.completed_image_url = filepath
@@ -582,7 +661,13 @@ async def submit_worksheet(
         with open(filepath, "rb") as f:
             image_data = base64.b64encode(f.read()).decode()
 
-        result = await ai_service.grade_worksheet(image_data, worksheet.answer_key)
+        result = await ai_service.grade_worksheet(
+            image_data,
+            worksheet.answer_key,
+            db=db,
+            family_id=current_user.family_id,
+            user_id=worksheet.user_id
+        )
 
         worksheet.ai_grading = result
         worksheet.score = result.get("score")
@@ -595,6 +680,8 @@ async def submit_worksheet(
             "score": worksheet.score,
             "grading": result
         }
+    except TokenLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         # If grading fails, still mark as submitted
         return {

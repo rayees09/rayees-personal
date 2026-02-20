@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, Users, CheckCircle, XCircle,
   Settings, ToggleLeft, ToggleRight, ChevronLeft, ChevronRight, ShieldCheck,
-  ChevronDown, ChevronUp, UserCheck, Mail
+  ChevronDown, ChevronUp, UserCheck, Mail, Globe
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -12,6 +12,7 @@ interface Family {
   name: string;
   slug: string;
   owner_email: string;
+  country: string | null;
   is_verified: boolean;
   is_active: boolean;
   subscription_plan: string;
@@ -37,7 +38,13 @@ export default function FamilyList() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [filterActive, setFilterActive] = useState<boolean | null>(null);
+  const [filterCountry, setFilterCountry] = useState<string>('');
   const [expandedFamily, setExpandedFamily] = useState<number | null>(null);
+
+  const countries = [
+    'India', 'United States', 'United Arab Emirates', 'United Kingdom',
+    'Canada', 'Australia', 'Saudi Arabia', 'Qatar'
+  ];
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const pageSize = 20;
@@ -49,7 +56,7 @@ export default function FamilyList() {
       return;
     }
     fetchFamilies();
-  }, [page, search, filterActive, navigate]);
+  }, [page, search, filterActive, filterCountry, navigate]);
 
   const fetchFamilies = async () => {
     try {
@@ -60,6 +67,7 @@ export default function FamilyList() {
       });
       if (search) params.set('search', search);
       if (filterActive !== null) params.set('is_active', filterActive.toString());
+      if (filterCountry) params.set('country', filterCountry);
 
       const response = await api.get(`/admin/families?${params}`);
       setFamilies(response.data.families);
@@ -177,6 +185,19 @@ export default function FamilyList() {
               Inactive
             </button>
           </div>
+          <div className="relative">
+            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+            <select
+              value={filterCountry}
+              onChange={(e) => { setFilterCountry(e.target.value); setPage(1); }}
+              className="bg-gray-800 text-white pl-9 pr-4 py-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none appearance-none min-w-[150px]"
+            >
+              <option value="">All Countries</option>
+              {countries.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Table */}
@@ -190,6 +211,7 @@ export default function FamilyList() {
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-4 py-3 text-left text-gray-300 text-sm">Family</th>
+                  <th className="px-4 py-3 text-left text-gray-300 text-sm">Country</th>
                   <th className="px-4 py-3 text-left text-gray-300 text-sm">Members</th>
                   <th className="px-4 py-3 text-left text-gray-300 text-sm">Status</th>
                   <th className="px-4 py-3 text-left text-gray-300 text-sm">AI Usage</th>
@@ -214,6 +236,11 @@ export default function FamilyList() {
                             <p className="text-gray-400 text-sm">{family.owner_email}</p>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-gray-300 text-sm">
+                          {family.country || <span className="text-gray-500">-</span>}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 text-gray-300">
@@ -281,7 +308,7 @@ export default function FamilyList() {
                     {/* Expanded Members Row */}
                     {expandedFamily === family.id && (
                       <tr className="bg-gray-850">
-                        <td colSpan={6} className="px-4 py-4">
+                        <td colSpan={7} className="px-4 py-4">
                           <div className="bg-gray-900 rounded-lg p-4">
                             <h4 className="text-white font-medium mb-3 flex items-center gap-2">
                               <Users size={16} /> Family Members

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
@@ -9,6 +9,7 @@ import re
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.family import Family, FamilyFeature, FamilyAiLimit, AVAILABLE_FEATURES
+from app.models.assistant import AppSettings
 from app.services.auth import get_current_user, get_password_hash
 from app.services.email_service import get_email_service
 from app.config import settings
@@ -18,6 +19,7 @@ from app.schemas.family import (
     FamilyResponse, FamilyDetailResponse, FeatureResponse, AiLimitResponse,
     AddMemberRequest, MemberResponse
 )
+from app.routers.support import log_activity
 
 router = APIRouter(prefix="/api/family", tags=["Family"])
 
@@ -44,6 +46,7 @@ def make_unique_slug(db: Session, base_slug: str) -> str:
 @router.post("/register", response_model=FamilyRegisterResponse)
 async def register_family(
     data: FamilyRegisterRequest,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """Register a new family. Sends verification email to owner."""
@@ -74,6 +77,7 @@ async def register_family(
         name=data.family_name,
         slug=slug,
         owner_email=data.owner_email,
+        country=data.country,
         verification_token=verification_token,
         verification_sent_at=datetime.utcnow(),
         is_verified=False,
@@ -103,16 +107,35 @@ async def register_family(
         )
         db.add(ff)
 
+    # Get default cost limit from app settings
+    default_cost_setting = db.query(AppSettings).filter(
+        AppSettings.key == "default_ai_cost_limit_cents"
+    ).first()
+    default_cost_limit_usd = 0.20  # Default fallback
+    if default_cost_setting and default_cost_setting.value:
+        default_cost_limit_usd = int(default_cost_setting.value) / 100
+
     # Create default AI limit
     ai_limit = FamilyAiLimit(
         family_id=family.id,
         monthly_token_limit=100000,  # 100k tokens default
-        current_month_usage=0
+        monthly_cost_limit_usd=default_cost_limit_usd,
+        current_month_usage=0,
+        current_month_cost_usd=0.0
     )
     db.add(ai_limit)
 
     db.commit()
     db.refresh(family)
+    db.refresh(owner)
+
+    # Log registration activity
+    await log_activity(
+        db, "register", request,
+        user_id=owner.id,
+        family_id=family.id,
+        details=f"New family registration: {data.family_name}"
+    )
 
     # Send verification email
     email_service = await get_email_service(db)
@@ -127,6 +150,7 @@ async def register_family(
         family_id=family.id,
         family_name=family.name,
         owner_email=family.owner_email,
+        country=family.country,
         message="Registration successful! Please check your email to verify your account.",
         requires_verification=True
     )
@@ -300,6 +324,53 @@ async def get_family_features(
     ).all()
 
     return {f.feature_key: f.is_enabled for f in features}
+
+
+@router.get("/available-features")
+async def get_available_features():
+    """Get list of all available features with descriptions."""
+    return AVAILABLE_FEATURES
+
+
+@router.put("/features")
+async def update_family_features(
+    features: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update feature flags for the current family. Parents only."""
+    if current_user.role != UserRole.PARENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only parents can update family features"
+        )
+
+    if not current_user.family_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No family associated with this user"
+        )
+
+    for feature_key, is_enabled in features.items():
+        feature = db.query(FamilyFeature).filter(
+            FamilyFeature.family_id == current_user.family_id,
+            FamilyFeature.feature_key == feature_key
+        ).first()
+
+        if feature:
+            feature.is_enabled = is_enabled
+        else:
+            # Create new feature entry
+            new_feature = FamilyFeature(
+                family_id=current_user.family_id,
+                feature_key=feature_key,
+                is_enabled=is_enabled
+            )
+            db.add(new_feature)
+
+    db.commit()
+
+    return {"message": "Features updated successfully"}
 
 
 # ============== MEMBER MANAGEMENT ==============

@@ -27,6 +27,8 @@ import FeatureManager from './pages/admin/FeatureManager';
 import TokenUsage from './pages/admin/TokenUsage';
 import FamilyFeatures from './pages/admin/FamilyFeatures';
 import AdminManagement from './pages/admin/AdminManagement';
+import IssuesList from './pages/admin/IssuesList';
+import ActivityLogs from './pages/admin/ActivityLogs';
 // Landing page
 import Landing from './pages/Landing';
 
@@ -58,6 +60,8 @@ function App() {
       <Route path="/admin/usage" element={<TokenUsage />} />
       <Route path="/admin/admins" element={<AdminManagement />} />
       <Route path="/admin/families/:familyId/features" element={<FamilyFeatures />} />
+      <Route path="/admin/issues" element={<IssuesList />} />
+      <Route path="/admin/activity-logs" element={<ActivityLogs />} />
 
       {/* Protected family routes */}
       <Route

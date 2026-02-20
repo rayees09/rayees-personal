@@ -44,6 +44,7 @@ class FamilyListItem(BaseModel):
     name: str
     slug: str
     owner_email: str
+    country: Optional[str] = None
     is_verified: bool
     is_active: bool
     subscription_plan: str

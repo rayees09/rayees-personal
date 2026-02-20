@@ -56,8 +56,8 @@ async def get_ai_context(
         "summary_text": ""
     }
 
-    # Get all family members
-    users = db.query(User).all()
+    # Get only family members (SECURITY FIX: filter by family_id)
+    users = db.query(User).filter(User.family_id == current_user.family_id).all()
     today = date.today()
     current_year = today.year
 

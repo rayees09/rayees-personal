@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: Optional[str] = None
 
+    # Google OAuth
+    google_client_id: Optional[str] = None
+
     # App
     app_name: str = "Rayees Family"
     debug: bool = True

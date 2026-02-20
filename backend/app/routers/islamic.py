@@ -22,6 +22,20 @@ from app.services.auth import get_current_user
 router = APIRouter(prefix="/api/islamic", tags=["Islamic Practice"])
 
 
+def validate_family_member(user_id: int, current_user: User, db: Session) -> User:
+    """Validate that user_id belongs to the current user's family."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.family_id == current_user.family_id
+    ).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found in your family"
+        )
+    return user
+
+
 # Prayer endpoints
 @router.get("/prayers/{user_id}/{prayer_date}", response_model=DailyPrayersResponse)
 async def get_daily_prayers(
@@ -31,6 +45,9 @@ async def get_daily_prayers(
     db: Session = Depends(get_db)
 ):
     """Get all prayers for a user on a specific date."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     prayers = db.query(Prayer).filter(
         Prayer.user_id == user_id,
         Prayer.date == prayer_date
@@ -71,6 +88,9 @@ async def log_prayer(
     db: Session = Depends(get_db)
 ):
     """Log a prayer."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(prayer_data.user_id, current_user, db)
+
     # Check if prayer already exists
     existing = db.query(Prayer).filter(
         Prayer.user_id == prayer_data.user_id,
@@ -108,6 +128,9 @@ async def update_prayer(
     if not prayer:
         raise HTTPException(status_code=404, detail="Prayer not found")
 
+    # Validate prayer belongs to family (SECURITY FIX)
+    validate_family_member(prayer.user_id, current_user, db)
+
     for field, value in prayer_data.dict(exclude_unset=True).items():
         setattr(prayer, field, value)
 
@@ -136,6 +159,9 @@ async def get_quran_progress(
     db: Session = Depends(get_db)
 ):
     """Get Quran memorization progress for a user."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     progress = db.query(QuranProgress).filter(
         QuranProgress.user_id == user_id
     ).order_by(QuranProgress.surah_number.desc()).all()
@@ -165,6 +191,9 @@ async def add_surah_progress(
     db: Session = Depends(get_db)
 ):
     """Add or update Quran memorization progress."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(progress_data.user_id, current_user, db)
+
     # Check if already exists
     existing = db.query(QuranProgress).filter(
         QuranProgress.user_id == progress_data.user_id,
@@ -211,6 +240,9 @@ async def update_quran_progress(
     if not progress:
         raise HTTPException(status_code=404, detail="Progress not found")
 
+    # Validate progress belongs to family (SECURITY FIX)
+    validate_family_member(progress.user_id, current_user, db)
+
     for field, value in progress_data.dict(exclude_unset=True).items():
         setattr(progress, field, value)
 
@@ -246,6 +278,9 @@ async def get_ramadan_log(
     db: Session = Depends(get_db)
 ):
     """Get Ramadan log for a user."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     query = db.query(RamadanDay).filter(RamadanDay.user_id == user_id)
 
     if year:
@@ -262,6 +297,9 @@ async def log_ramadan_day(
     db: Session = Depends(get_db)
 ):
     """Log a Ramadan day."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(day_data.user_id, current_user, db)
+
     # Check if already exists
     existing = db.query(RamadanDay).filter(
         RamadanDay.user_id == day_data.user_id,
@@ -295,6 +333,9 @@ async def update_ramadan_day(
     if not day:
         raise HTTPException(status_code=404, detail="Ramadan day not found")
 
+    # Validate day belongs to family (SECURITY FIX)
+    validate_family_member(day.user_id, current_user, db)
+
     for field, value in day_data.dict(exclude_unset=True).items():
         setattr(day, field, value)
 
@@ -312,6 +353,9 @@ async def get_ramadan_summary(
     db: Session = Depends(get_db)
 ):
     """Get Ramadan summary statistics."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
     query = db.query(RamadanDay).filter(RamadanDay.user_id == user_id)
 
     if year:
@@ -363,6 +407,11 @@ async def get_ramadan_goals(
 ):
     """Get Ramadan goals for a user."""
     target_user_id = user_id or current_user.id
+
+    # Validate user belongs to same family if user_id specified (SECURITY FIX)
+    if user_id:
+        validate_family_member(user_id, current_user, db)
+
     query = db.query(RamadanGoal).filter(
         RamadanGoal.user_id == target_user_id,
         RamadanGoal.is_active == True
@@ -402,6 +451,12 @@ async def log_ramadan_goal(
     db: Session = Depends(get_db)
 ):
     """Log progress for a Ramadan goal."""
+    # Validate goal belongs to family (SECURITY FIX)
+    goal = db.query(RamadanGoal).filter(RamadanGoal.id == log_data.goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    validate_family_member(goal.user_id, current_user, db)
+
     # Check if log already exists for this date
     existing = db.query(RamadanGoalLog).filter(
         RamadanGoalLog.goal_id == log_data.goal_id,
@@ -435,6 +490,12 @@ async def get_ramadan_goal_logs(
     db: Session = Depends(get_db)
 ):
     """Get all logs for a Ramadan goal."""
+    # Validate goal belongs to family (SECURITY FIX)
+    goal = db.query(RamadanGoal).filter(RamadanGoal.id == goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    validate_family_member(goal.user_id, current_user, db)
+
     logs = db.query(RamadanGoalLog).filter(
         RamadanGoalLog.goal_id == goal_id
     ).order_by(RamadanGoalLog.date.desc()).all()
