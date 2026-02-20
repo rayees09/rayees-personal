@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { quranGoalsApi, authApi } from '../services/api';
 import { format } from 'date-fns';
-import { BookOpen, Camera, Target, TrendingUp, Check, Plus, Calendar, Edit2, Trash2, X } from 'lucide-react';
+import { BookOpen, Camera, Target, TrendingUp, Check, Plus, Calendar, Edit2, Trash2, X, ArrowRight } from 'lucide-react';
 
 export default function QuranGoal() {
   const user = useAuthStore((state) => state.user);
@@ -13,6 +13,7 @@ export default function QuranGoal() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [manualPages, setManualPages] = useState('');
+  const [currentPageInput, setCurrentPageInput] = useState('');
   const [editingLog, setEditingLog] = useState<any>(null);
   const [editLogPages, setEditLogPages] = useState('');
 
@@ -91,6 +92,21 @@ export default function QuranGoal() {
     const formData = new FormData();
     formData.append('pages_read', manualPages);
     logMutation.mutate(formData);
+  };
+
+  const handleCurrentPageLog = () => {
+    if (!currentPageInput || !goal) return;
+    const newPage = Number(currentPageInput);
+    const currentPage = goal.current_page || 0;
+    const diff = newPage - currentPage;
+    if (diff <= 0) {
+      alert(`Current page (${newPage}) must be greater than last logged page (${currentPage})`);
+      return;
+    }
+    const formData = new FormData();
+    formData.append('pages_read', diff.toString());
+    logMutation.mutate(formData);
+    setCurrentPageInput('');
   };
 
   if (isLoading) {
@@ -253,7 +269,7 @@ export default function QuranGoal() {
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="font-semibold text-lg mb-4">Log Your Reading</h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Upload Page Image */}
           <div
             onClick={() => fileInputRef.current?.click()}
@@ -275,9 +291,37 @@ export default function QuranGoal() {
             <p className="text-sm text-gray-500">AI will detect page number</p>
           </div>
 
-          {/* Manual Entry */}
+          {/* Current Page Entry */}
           <div className="border rounded-xl p-6">
-            <p className="font-medium mb-3">Or enter manually</p>
+            <p className="font-medium mb-3">Enter current page</p>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={currentPageInput}
+                onChange={(e) => setCurrentPageInput(e.target.value)}
+                placeholder={`Page # (now at ${goal?.current_page || 0})`}
+                className="flex-1 px-3 py-2 border rounded-lg"
+                min={(goal?.current_page || 0) + 1}
+                max={goal?.total_pages || 604}
+              />
+              <button
+                onClick={handleCurrentPageLog}
+                disabled={!currentPageInput || logMutation.isPending}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
+              >
+                <ArrowRight size={20} />
+              </button>
+            </div>
+            {currentPageInput && goal && Number(currentPageInput) > goal.current_page && (
+              <p className="text-sm text-green-600 mt-2">
+                Will log +{Number(currentPageInput) - goal.current_page} pages
+              </p>
+            )}
+          </div>
+
+          {/* Manual Pages Entry */}
+          <div className="border rounded-xl p-6">
+            <p className="font-medium mb-3">Or add pages read</p>
             <div className="flex gap-2">
               <input
                 type="number"

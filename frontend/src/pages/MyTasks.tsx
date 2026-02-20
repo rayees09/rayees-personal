@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { quickTasksApi } from '../services/api';
 import { format } from 'date-fns';
-import { Plus, Briefcase, User, Heart, DollarSign, Users, X, Clock, Edit2, Trash2, Eye, CheckCircle, Sun, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Briefcase, User, Building2, DollarSign, Users, X, Clock, Edit2, Trash2, Eye, CheckCircle, Sun, ChevronUp, ChevronDown } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'personal', label: 'Personal', icon: User, color: 'bg-blue-100 text-blue-700' },
   { id: 'office', label: 'Office', icon: Briefcase, color: 'bg-purple-100 text-purple-700' },
   { id: 'family', label: 'Family', icon: Users, color: 'bg-green-100 text-green-700' },
-  { id: 'health', label: 'Health', icon: Heart, color: 'bg-red-100 text-red-700' },
+  { id: 'business', label: 'Business', icon: Building2, color: 'bg-red-100 text-red-700' },
   { id: 'finance', label: 'Finance', icon: DollarSign, color: 'bg-yellow-100 text-yellow-700' },
 ];
 
