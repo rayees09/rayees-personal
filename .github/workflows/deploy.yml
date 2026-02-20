@@ -58,6 +58,7 @@ jobs:
             # Frontend build
             cd ../frontend
             npm install --silent
+            echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" > .env
             npm run build
 
             # Setup nginx
