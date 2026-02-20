@@ -27,3 +27,4 @@ aiofiles==23.2.1
 # PDF Generation
 reportlab==4.0.9
 email-validator
+requests
