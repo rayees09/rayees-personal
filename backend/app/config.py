@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     class Config:
         # Use absolute path to .env file
         env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+        extra = "ignore"  # Ignore extra env vars like VITE_* that are for frontend
 
 
 settings = Settings()
