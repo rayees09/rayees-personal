@@ -55,6 +55,9 @@ jobs:
             ENVEOF
             fi
 
+            # Add/update GOOGLE_CLIENT_ID for backend OAuth
+            grep -q "^GOOGLE_CLIENT_ID=" .env && sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}|" .env || echo "GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> .env
+
             # Frontend build
             cd ../frontend
             npm install --silent
