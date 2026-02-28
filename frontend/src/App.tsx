@@ -13,6 +13,7 @@ import QuranGoal from './pages/QuranGoal';
 import Learning from './pages/Learning';
 import Points from './pages/Points';
 import MyTasks from './pages/MyTasks';
+import MyNotes from './pages/MyNotes';
 import Reminders from './pages/Reminders';
 import Settings from './pages/Settings';
 import Zakat from './pages/Zakat';
@@ -75,6 +76,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="my-tasks" element={<MyTasks />} />
+        <Route path="notes" element={<MyNotes />} />
         <Route path="reminders" element={<Reminders />} />
         <Route path="prayers" element={<Prayers />} />
         <Route path="ramadan" element={<Ramadan />} />

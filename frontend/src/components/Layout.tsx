@@ -2,7 +2,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import {
   Home, CheckSquare, Moon, BookOpen, GraduationCap, Star, LogOut, Menu, X,
-  Briefcase, Bell, Target, Settings, Coins, Wallet, Users, HelpCircle, Sun
+  Briefcase, Bell, Target, Settings, Coins, Wallet, Users, HelpCircle, Sun, FileText
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api, { familyApi } from '../services/api';
@@ -13,6 +13,7 @@ const navItems = [
   { path: '/', icon: Home, label: 'Dashboard' },
   { path: '/tasks', icon: CheckSquare, label: 'Family Tasks', featureKey: 'tasks' },
   { path: '/my-tasks', icon: Briefcase, label: 'My Tasks', parentOnly: true, featureKey: 'my_tasks' },
+  { path: '/notes', icon: FileText, label: 'My Notes', parentOnly: true, featureKey: 'my_tasks' },
   { path: '/reminders', icon: Bell, label: 'Reminders', featureKey: 'reminders' },
   { path: '/prayers', icon: Moon, label: 'Prayers', featureKey: 'prayers' },
   { path: '/ramadan', icon: Moon, label: 'Ramadan', featureKey: 'ramadan' },
