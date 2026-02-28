@@ -141,9 +141,29 @@ class QuickTask(Base):
     due_time = Column(Time, nullable=True)
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    notes = Column(String(500), nullable=True)
+    notes = Column(Text, nullable=True)  # Changed to Text for longer notes
+    notes_previous = Column(Text, nullable=True)  # For 1-version undo history
     is_today = Column(Boolean, default=False)  # Mark task for today
     sort_order = Column(Integer, default=0)  # For manual ordering
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+
+
+class Note(Base):
+    """Personal notes with undo support - like Evernote lite"""
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=True)
+    content_previous = Column(Text, nullable=True)  # For simple 1-version undo
+    category = Column(String(50), default="personal")  # personal, office, family, business, finance
+    is_pinned = Column(Boolean, default=False)
+    is_archived = Column(Boolean, default=False)
+    shared_with = Column(Text, nullable=True)  # Comma-separated user IDs for family sharing
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User")
