@@ -331,6 +331,48 @@ export const quickTasksApi = {
     const res = await api.put('/quick-tasks/reorder', { task_ids: taskIds });
     return res.data;
   },
+  undoNotes: async (id: number) => {
+    const res = await api.post(`/quick-tasks/${id}/undo-notes`);
+    return res.data;
+  },
+};
+
+// Notes API
+export const notesApi = {
+  create: async (data: { title: string; content?: string; category: string; shared_with?: number[] }) => {
+    const res = await api.post('/notes', data);
+    return res.data;
+  },
+  getAll: async (category?: string, includeArchived?: boolean, includeShared?: boolean) => {
+    const res = await api.get('/notes', {
+      params: { category, include_archived: includeArchived, include_shared: includeShared ?? true },
+    });
+    return res.data;
+  },
+  get: async (id: number) => {
+    const res = await api.get(`/notes/${id}`);
+    return res.data;
+  },
+  update: async (id: number, data: { title?: string; content?: string; category?: string; shared_with?: number[] }) => {
+    const res = await api.put(`/notes/${id}`, data);
+    return res.data;
+  },
+  delete: async (id: number) => {
+    const res = await api.delete(`/notes/${id}`);
+    return res.data;
+  },
+  undo: async (id: number) => {
+    const res = await api.post(`/notes/${id}/undo`);
+    return res.data;
+  },
+  togglePin: async (id: number) => {
+    const res = await api.put(`/notes/${id}/pin`);
+    return res.data;
+  },
+  toggleArchive: async (id: number) => {
+    const res = await api.put(`/notes/${id}/archive`);
+    return res.data;
+  },
 };
 
 // Ramadan Goals API
@@ -361,6 +403,30 @@ export const ramadanGoalsApi = {
   },
 };
 
+// Qadha (Missed Fasts) API
+export const qadhaApi = {
+  add: async (data: { ramadan_year: number; original_date?: string; missed_reason?: string; notes?: string }) => {
+    const res = await api.post('/islamic/qadha', data);
+    return res.data;
+  },
+  getRecords: async (userId: number, year?: number, pendingOnly?: boolean) => {
+    const res = await api.get(`/islamic/qadha/${userId}`, { params: { year, pending_only: pendingOnly } });
+    return res.data;
+  },
+  update: async (qadhaId: number, data: { compensated_date?: string; is_compensated?: boolean; notes?: string }) => {
+    const res = await api.put(`/islamic/qadha/${qadhaId}`, data);
+    return res.data;
+  },
+  delete: async (qadhaId: number) => {
+    const res = await api.delete(`/islamic/qadha/${qadhaId}`);
+    return res.data;
+  },
+  getSummary: async (userId: number) => {
+    const res = await api.get(`/islamic/qadha/${userId}/summary`);
+    return res.data;
+  },
+};
+
 // Zakat API
 export const zakatApi = {
   createConfig: async (data: { year: number; total_due: number; currency: string; notes?: string }) => {
@@ -387,12 +453,16 @@ export const zakatApi = {
     const res = await api.delete(`/islamic/zakat/config/${configId}`);
     return res.data;
   },
-  addPayment: async (data: { config_id: number; date: string; amount: number; recipient?: string; notes?: string }) => {
+  addPayment: async (data: { config_id: number; date: string; amount: number; recipient?: string; notes?: string; is_recipient_private?: boolean }) => {
     const res = await api.post('/islamic/zakat/payment', data);
     return res.data;
   },
   getPayments: async (configId: number) => {
     const res = await api.get(`/islamic/zakat/payments/${configId}`);
+    return res.data;
+  },
+  updatePayment: async (paymentId: number, data: { date?: string; amount?: number; recipient?: string; notes?: string; is_recipient_private?: boolean }) => {
+    const res = await api.put(`/islamic/zakat/payment/${paymentId}`, data);
     return res.data;
   },
   deletePayment: async (paymentId: number) => {
@@ -466,6 +536,53 @@ export const aiApi = {
   },
   getContextText: async () => {
     const res = await api.get('/ai/context/text');
+    return res.data;
+  },
+};
+
+// Google Sheets Sync API
+export const syncApi = {
+  // OAuth flow
+  getAuthUrl: async () => {
+    const res = await api.get('/sync/google/auth-url');
+    return res.data;
+  },
+  getStatus: async () => {
+    const res = await api.get('/sync/google/status');
+    return res.data;
+  },
+  disconnect: async () => {
+    const res = await api.delete('/sync/google/disconnect');
+    return res.data;
+  },
+  // Folder management
+  listFolders: async () => {
+    const res = await api.get('/sync/google/folders');
+    return res.data;
+  },
+  setFolder: async (folderId: string) => {
+    const res = await api.post('/sync/google/folder', { folder_id: folderId });
+    return res.data;
+  },
+  // Sync operations
+  syncZakat: async (year: number) => {
+    const res = await api.post('/sync/google/zakat', { year });
+    return res.data;
+  },
+  syncExpenses: async (year: number) => {
+    const res = await api.post('/sync/google/expenses', { year });
+    return res.data;
+  },
+  syncNotes: async (year: number) => {
+    const res = await api.post('/sync/google/notes', { year });
+    return res.data;
+  },
+  syncTasks: async (year: number) => {
+    const res = await api.post('/sync/google/tasks', { year });
+    return res.data;
+  },
+  syncAll: async (year: number) => {
+    const res = await api.post('/sync/google/all', { year });
     return res.data;
   },
 };

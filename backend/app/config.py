@@ -15,8 +15,10 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: Optional[str] = None
 
-    # Google OAuth
+    # Google OAuth for Drive/Sheets sync
     google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    google_redirect_uri: str = "http://localhost:8000/api/sync/google/callback"
 
     # App
     app_name: str = "Rayees Family"
