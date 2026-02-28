@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { zakatApi } from '../services/api';
-import { format } from 'date-fns';
-import { Coins, Plus, Trash2, X, CheckCircle, Edit2, RefreshCw } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { Coins, Plus, Trash2, X, CheckCircle, Edit2, RefreshCw, EyeOff } from 'lucide-react';
 
 export default function Zakat() {
   const user = useAuthStore((state) => state.user);
@@ -33,7 +33,11 @@ export default function Zakat() {
     amount: 0,
     recipient: '',
     notes: '',
+    is_recipient_private: false,
   });
+
+  const [showEditPayment, setShowEditPayment] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<any>(null);
 
   // Currency conversion states
   const [inputCurrency, setInputCurrency] = useState('USD');
@@ -84,10 +88,23 @@ export default function Zakat() {
       queryClient.invalidateQueries({ queryKey: ['zakat-configs'] });
       queryClient.invalidateQueries({ queryKey: ['zakat-payments'] });
       setShowAddPayment(false);
-      setPaymentForm({ date: format(new Date(), 'yyyy-MM-dd'), amount: 0, recipient: '', notes: '' });
+      setPaymentForm({ date: format(new Date(), 'yyyy-MM-dd'), amount: 0, recipient: '', notes: '', is_recipient_private: false });
       setInputCurrency('USD');
       setInputAmount(0);
       setExchangeRate(null);
+    },
+  });
+
+  const updatePaymentMutation = useMutation({
+    mutationFn: (data: { id: number; date?: string; amount?: number; recipient?: string; notes?: string; is_recipient_private?: boolean }) => {
+      const { id, ...rest } = data;
+      return zakatApi.updatePayment(id, rest);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['zakat-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['zakat-payments'] });
+      setShowEditPayment(false);
+      setEditingPayment(null);
     },
   });
 
@@ -294,18 +311,46 @@ export default function Zakat() {
                       <p className="font-semibold text-green-600">
                         {formatCurrency(payment.amount, selectedConfig.currency)}
                       </p>
-                      <p className="text-sm text-gray-500">
-                        {format(new Date(payment.date), 'MMM d, yyyy')}
-                        {payment.recipient && ` - ${payment.recipient}`}
+                      <p className="text-sm text-gray-500 flex items-center gap-1">
+                        {format(parseISO(payment.date), 'MMM d, yyyy')}
+                        {payment.recipient && (
+                          <>
+                            <span>-</span>
+                            {payment.is_recipient_private && (
+                              <span title="Private">
+                                <EyeOff size={12} className="text-gray-400" />
+                              </span>
+                            )}
+                            <span className={payment.recipient === '(Private)' ? 'text-gray-400 italic' : ''}>
+                              {payment.recipient}
+                            </span>
+                          </>
+                        )}
                       </p>
                       {payment.notes && <p className="text-xs text-gray-400">{payment.notes}</p>}
                     </div>
-                    <button
-                      onClick={() => deletePaymentMutation.mutate(payment.id)}
-                      className="text-red-500 hover:text-red-700 p-1"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingPayment({
+                            ...payment,
+                            date: payment.date,
+                          });
+                          setShowEditPayment(true);
+                        }}
+                        className="text-blue-500 hover:text-blue-700 p-1"
+                        title="Edit"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => deletePaymentMutation.mutate(payment.id)}
+                        className="text-red-500 hover:text-red-700 p-1"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -556,6 +601,18 @@ export default function Zakat() {
                   rows={2}
                 />
               </div>
+              <label className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={paymentForm.is_recipient_private}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, is_recipient_private: e.target.checked })}
+                  className="w-4 h-4 rounded"
+                />
+                <div className="flex items-center gap-1">
+                  <EyeOff size={16} className="text-gray-500" />
+                  <span className="text-sm">Hide recipient from other family members</span>
+                </div>
+              </label>
               <button
                 onClick={() => {
                   // Use converted amount (always save in USD)
@@ -571,6 +628,96 @@ export default function Zakat() {
                   ? `Add Payment ($${convertedAmount.toLocaleString()} USD)`
                   : 'Add Payment'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payment Modal */}
+      {showEditPayment && editingPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold">Edit Zakat Payment</h3>
+              <button onClick={() => { setShowEditPayment(false); setEditingPayment(null); }} className="text-gray-500">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Date</label>
+                <input
+                  type="date"
+                  value={editingPayment.date?.split('T')[0] || editingPayment.date}
+                  onChange={(e) => setEditingPayment({ ...editingPayment, date: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Amount ({selectedConfig?.currency || 'USD'})</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editingPayment.amount || ''}
+                  onChange={(e) => setEditingPayment({ ...editingPayment, amount: parseInt(e.target.value) || 0 })}
+                  placeholder="Enter amount"
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Recipient (optional)</label>
+                <input
+                  type="text"
+                  value={editingPayment.recipient === '(Private)' ? '' : (editingPayment.recipient || '')}
+                  onChange={(e) => setEditingPayment({ ...editingPayment, recipient: e.target.value })}
+                  placeholder="Who received this Zakat?"
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+                <textarea
+                  value={editingPayment.notes || ''}
+                  onChange={(e) => setEditingPayment({ ...editingPayment, notes: e.target.value })}
+                  placeholder="Any additional notes"
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows={2}
+                />
+              </div>
+              <label className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editingPayment.is_recipient_private || false}
+                  onChange={(e) => setEditingPayment({ ...editingPayment, is_recipient_private: e.target.checked })}
+                  className="w-4 h-4 rounded"
+                />
+                <div className="flex items-center gap-1">
+                  <EyeOff size={16} className="text-gray-500" />
+                  <span className="text-sm">Hide recipient from other family members</span>
+                </div>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowEditPayment(false); setEditingPayment(null); }}
+                  className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => updatePaymentMutation.mutate({
+                    id: editingPayment.id,
+                    date: editingPayment.date,
+                    amount: editingPayment.amount,
+                    recipient: editingPayment.recipient,
+                    notes: editingPayment.notes,
+                    is_recipient_private: editingPayment.is_recipient_private,
+                  })}
+                  disabled={!editingPayment.amount || updatePaymentMutation.isPending}
+                  className="flex-1 py-2 bg-islamic-green text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {updatePaymentMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

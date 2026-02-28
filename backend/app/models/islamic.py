@@ -88,6 +88,9 @@ class RamadanDay(Base):
     date = Column(Date, nullable=False)
     hijri_day = Column(Integer, nullable=True)  # Day of Ramadan (1-30)
     fasted = Column(Boolean, default=False)
+    # New fields for missed fasting tracking
+    fasting_status = Column(String(20), default="not_tracked")  # fasted, missed, exempt, not_tracked
+    missed_reason = Column(String(50), nullable=True)  # illness, travel, menstruation, other
     suhoor = Column(Boolean, default=False)
     iftar = Column(Boolean, default=False)
     taraweeh = Column(Boolean, default=False)
@@ -98,6 +101,23 @@ class RamadanDay(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="ramadan_days")
+
+
+class QadhaDay(Base):
+    """Track missed fasts and their compensation (Qadha)"""
+    __tablename__ = "qadha_days"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    ramadan_year = Column(Integer, nullable=False)  # Which Ramadan year was missed
+    original_date = Column(Date, nullable=True)  # Original missed date (optional)
+    missed_reason = Column(String(50), nullable=True)  # illness, travel, menstruation, other
+    compensated_date = Column(Date, nullable=True)  # When qadha was performed
+    is_compensated = Column(Boolean, default=False)
+    notes = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
 
 
 # Quran has 604 pages total (standard Madina Mushaf)
@@ -207,6 +227,7 @@ class ZakatPayment(Base):
     amount = Column(Integer, nullable=False)
     recipient = Column(String(255), nullable=True)  # Who received
     notes = Column(String(500), nullable=True)
+    is_recipient_private = Column(Boolean, default=False)  # Hide recipient from other family members
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     config = relationship("ZakatConfig", back_populates="payments")

@@ -1,8 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { quickTasksApi } from '../services/api';
 import { format } from 'date-fns';
-import { Plus, Briefcase, User, Building2, DollarSign, Users, X, Clock, Edit2, Trash2, Eye, CheckCircle, Sun, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Briefcase, User, Building2, DollarSign, Users, X, Clock, Edit2, Trash2, Eye, CheckCircle, Sun, ChevronUp, ChevronDown, RotateCcw, ExternalLink, Link2 } from 'lucide-react';
+
+// Helper to detect and render URLs as clickable links
+function renderTextWithLinks(text: string) {
+  if (!text) return null;
+
+  // URL regex pattern
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      // Extract domain for display
+      try {
+        const url = new URL(part);
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline break-all"
+          >
+            <Link2 size={12} className="flex-shrink-0" />
+            <span>{url.hostname}{url.pathname !== '/' ? url.pathname.substring(0, 30) + (url.pathname.length > 30 ? '...' : '') : ''}</span>
+            <ExternalLink size={10} className="flex-shrink-0" />
+          </a>
+        );
+      } catch {
+        return part;
+      }
+    }
+    return part;
+  });
+}
 
 const CATEGORIES = [
   { id: 'personal', label: 'Personal', icon: User, color: 'bg-blue-100 text-blue-700' },
@@ -27,6 +61,11 @@ export default function MyTasks() {
   const [viewingTask, setViewingTask] = useState<any>(null);
   const [quickAdd, setQuickAdd] = useState('');
   const [quickCategory, setQuickCategory] = useState('personal');
+
+  // Sync quick add category with selected tab
+  useEffect(() => {
+    setQuickCategory(selectedCategory || 'personal');
+  }, [selectedCategory]);
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ['quick-tasks', selectedCategory],
@@ -330,7 +369,10 @@ export default function MyTasks() {
 
       {/* Add Task Modal */}
       {showAddModal && (
-        <AddTaskModal onClose={() => setShowAddModal(false)} />
+        <AddTaskModal
+          onClose={() => setShowAddModal(false)}
+          defaultCategory={selectedCategory || 'personal'}
+        />
       )}
 
       {/* Edit Task Modal */}
@@ -364,11 +406,11 @@ export default function MyTasks() {
   );
 }
 
-function AddTaskModal({ onClose }: { onClose: () => void }) {
+function AddTaskModal({ onClose, defaultCategory }: { onClose: () => void; defaultCategory: string }) {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     title: '',
-    category: 'personal',
+    category: defaultCategory,
     priority: 'medium',
     due_date: '',
     notes: '',
@@ -491,6 +533,7 @@ function EditTaskModal({
   onSave: (data: any) => void;
   isPending: boolean;
 }) {
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     title: task.title || '',
     category: task.category || 'personal',
@@ -499,9 +542,17 @@ function EditTaskModal({
     notes: task.notes || '',
   });
 
+  const undoNotesMutation = useMutation({
+    mutationFn: () => quickTasksApi.undoNotes(task.id),
+    onSuccess: (data) => {
+      setFormData({ ...formData, notes: data.notes || '' });
+      queryClient.invalidateQueries({ queryKey: ['quick-tasks'] });
+    },
+  });
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Edit Task</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
@@ -570,13 +621,29 @@ function EditTaskModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1">Notes</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium">Notes</label>
+              {task.notes_previous && (
+                <button
+                  type="button"
+                  onClick={() => undoNotesMutation.mutate()}
+                  disabled={undoNotesMutation.isPending}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                  title="Restore previous notes"
+                >
+                  <RotateCcw size={12} />
+                  Undo
+                </button>
+              )}
+            </div>
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-3 py-1.5 border rounded-lg text-sm"
-              rows={2}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+              rows={5}
+              placeholder="Add notes, URLs, or any details..."
             />
+            <p className="text-xs text-gray-400 mt-1">URLs will be clickable when saved</p>
           </div>
 
           <div className="flex gap-2">
@@ -657,9 +724,14 @@ function ViewTaskModal({
 
           {/* Notes */}
           {task.notes && (
-            <div className="bg-gray-50 rounded p-2">
-              <p className="text-xs text-gray-500 mb-0.5">Notes</p>
-              <p className="text-sm text-gray-700">{task.notes}</p>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                <Link2 size={10} />
+                Notes
+              </p>
+              <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {renderTextWithLinks(task.notes)}
+              </div>
             </div>
           )}
 

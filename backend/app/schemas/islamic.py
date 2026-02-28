@@ -56,6 +56,20 @@ class DailyPrayersResponse(BaseModel):
     total_count: int
 
 
+class FastingStatus(str, Enum):
+    NOT_TRACKED = "not_tracked"
+    FASTED = "fasted"
+    MISSED = "missed"
+    EXEMPT = "exempt"
+
+
+class MissedReason(str, Enum):
+    ILLNESS = "illness"
+    TRAVEL = "travel"
+    MENSTRUATION = "menstruation"
+    OTHER = "other"
+
+
 class SurahStatus(str, Enum):
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
@@ -98,6 +112,8 @@ class RamadanDayCreate(BaseModel):
     date: date
     hijri_day: Optional[int] = None
     fasted: bool = False
+    fasting_status: FastingStatus = FastingStatus.NOT_TRACKED
+    missed_reason: Optional[MissedReason] = None
     suhoor: bool = False
     iftar: bool = False
     taraweeh: bool = False
@@ -109,6 +125,8 @@ class RamadanDayCreate(BaseModel):
 
 class RamadanDayUpdate(BaseModel):
     fasted: Optional[bool] = None
+    fasting_status: Optional[FastingStatus] = None
+    missed_reason: Optional[MissedReason] = None
     suhoor: Optional[bool] = None
     iftar: Optional[bool] = None
     taraweeh: Optional[bool] = None
@@ -124,6 +142,8 @@ class RamadanDayResponse(BaseModel):
     date: date
     hijri_day: Optional[int]
     fasted: bool
+    fasting_status: str
+    missed_reason: Optional[str]
     suhoor: bool
     iftar: bool
     taraweeh: bool
@@ -140,9 +160,50 @@ class RamadanSummaryResponse(BaseModel):
     user_id: int
     total_days: int
     fasted_days: int
+    missed_days: int
+    exempt_days: int
+    qadha_pending: int
+    qadha_completed: int
     taraweeh_days: int
     total_quran_pages: int
     charity_days: int
+
+
+# ============== QADHA (MISSED FASTS) ==============
+
+class QadhaCreate(BaseModel):
+    ramadan_year: int
+    original_date: Optional[date] = None
+    missed_reason: Optional[MissedReason] = None
+    notes: Optional[str] = None
+
+
+class QadhaUpdate(BaseModel):
+    compensated_date: Optional[date] = None
+    is_compensated: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class QadhaResponse(BaseModel):
+    id: int
+    user_id: int
+    ramadan_year: int
+    original_date: Optional[date]
+    missed_reason: Optional[str]
+    compensated_date: Optional[date]
+    is_compensated: bool
+    notes: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QadhaSummaryResponse(BaseModel):
+    user_id: int
+    total_pending: int
+    total_completed: int
+    by_year: list  # List of {year, pending, completed}
 
 
 # ============== RAMADAN GOALS ==============
@@ -221,6 +282,15 @@ class ZakatPaymentCreate(BaseModel):
     amount: int
     recipient: Optional[str] = None
     notes: Optional[str] = None
+    is_recipient_private: bool = False  # Hide recipient from other family members
+
+
+class ZakatPaymentUpdate(BaseModel):
+    date: Optional[date] = None
+    amount: Optional[int] = None
+    recipient: Optional[str] = None
+    notes: Optional[str] = None
+    is_recipient_private: Optional[bool] = None
 
 
 class ZakatPaymentResponse(BaseModel):
@@ -231,6 +301,7 @@ class ZakatPaymentResponse(BaseModel):
     amount: int
     recipient: Optional[str]
     notes: Optional[str]
+    is_recipient_private: bool = False
 
     class Config:
         from_attributes = True

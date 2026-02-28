@@ -330,18 +330,30 @@ async def create_reward(
     if current_user.role != UserRole.PARENT:
         raise HTTPException(status_code=403, detail="Only parents can create rewards")
 
-    reward = Reward(
-        family_id=current_user.family_id,
-        name=reward_data.name,
-        description=reward_data.description,
-        points_required=reward_data.points_required,
-        image_url=reward_data.image_url
-    )
-    db.add(reward)
-    db.commit()
-    db.refresh(reward)
+    if not current_user.family_id:
+        raise HTTPException(status_code=400, detail="User must belong to a family to create rewards")
 
-    return reward
+    if not reward_data.name or not reward_data.name.strip():
+        raise HTTPException(status_code=400, detail="Reward name is required")
+
+    if reward_data.points_required <= 0:
+        raise HTTPException(status_code=400, detail="Points required must be greater than 0")
+
+    try:
+        reward = Reward(
+            family_id=current_user.family_id,
+            name=reward_data.name.strip(),
+            description=reward_data.description.strip() if reward_data.description else None,
+            points_required=reward_data.points_required,
+            image_url=reward_data.image_url
+        )
+        db.add(reward)
+        db.commit()
+        db.refresh(reward)
+        return reward
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create reward: {str(e)}")
 
 
 @router.post("/rewards/{reward_id}/redeem")

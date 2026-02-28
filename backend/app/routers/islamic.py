@@ -8,14 +8,15 @@ from app.database import get_db
 from app.models.user import User
 from app.models.islamic import (
     Prayer, PrayerName, PrayerStatus, QuranProgress, RamadanDay, SurahStatus, QURAN_SURAHS,
-    RamadanGoal, RamadanGoalLog, ZakatConfig, ZakatPayment
+    RamadanGoal, RamadanGoalLog, ZakatConfig, ZakatPayment, QadhaDay
 )
 from app.schemas.islamic import (
     PrayerCreate, PrayerUpdate, PrayerResponse, DailyPrayersResponse,
     QuranProgressCreate, QuranProgressUpdate, QuranProgressResponse,
     RamadanDayCreate, RamadanDayUpdate, RamadanDayResponse, RamadanSummaryResponse,
     RamadanGoalCreate, RamadanGoalResponse, RamadanGoalLogCreate, RamadanGoalLogResponse,
-    ZakatConfigCreate, ZakatConfigResponse, ZakatPaymentCreate, ZakatPaymentResponse
+    ZakatConfigCreate, ZakatConfigResponse, ZakatPaymentCreate, ZakatPaymentUpdate, ZakatPaymentResponse,
+    QadhaCreate, QadhaUpdate, QadhaResponse, QadhaSummaryResponse
 )
 from app.services.auth import get_current_user
 
@@ -363,13 +364,158 @@ async def get_ramadan_summary(
 
     days = query.all()
 
+    # Count by fasting status
+    fasted_days = sum(1 for d in days if d.fasting_status == "fasted" or (d.fasting_status == "not_tracked" and d.fasted))
+    missed_days = sum(1 for d in days if d.fasting_status == "missed")
+    exempt_days = sum(1 for d in days if d.fasting_status == "exempt")
+
+    # Get Qadha stats for this year
+    qadha_year = year or datetime.now().year
+    qadha_pending = db.query(QadhaDay).filter(
+        QadhaDay.user_id == user_id,
+        QadhaDay.ramadan_year == qadha_year,
+        QadhaDay.is_compensated == False
+    ).count()
+    qadha_completed = db.query(QadhaDay).filter(
+        QadhaDay.user_id == user_id,
+        QadhaDay.ramadan_year == qadha_year,
+        QadhaDay.is_compensated == True
+    ).count()
+
     return RamadanSummaryResponse(
         user_id=user_id,
         total_days=len(days),
-        fasted_days=sum(1 for d in days if d.fasted),
+        fasted_days=fasted_days,
+        missed_days=missed_days,
+        exempt_days=exempt_days,
+        qadha_pending=qadha_pending,
+        qadha_completed=qadha_completed,
         taraweeh_days=sum(1 for d in days if d.taraweeh),
         total_quran_pages=sum(d.quran_pages for d in days),
         charity_days=sum(1 for d in days if d.charity_given)
+    )
+
+
+# ============== QADHA (MISSED FASTS) ==============
+
+@router.post("/qadha", response_model=QadhaResponse)
+async def add_qadha(
+    qadha_data: QadhaCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add a missed fast record (Qadha)."""
+    qadha = QadhaDay(
+        user_id=current_user.id,
+        ramadan_year=qadha_data.ramadan_year,
+        original_date=qadha_data.original_date,
+        missed_reason=qadha_data.missed_reason.value if qadha_data.missed_reason else None,
+        notes=qadha_data.notes
+    )
+    db.add(qadha)
+    db.commit()
+    db.refresh(qadha)
+    return qadha
+
+
+@router.get("/qadha/{user_id}", response_model=List[QadhaResponse])
+async def get_qadha_records(
+    user_id: int,
+    year: Optional[int] = None,
+    pending_only: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all Qadha records for a user."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
+    query = db.query(QadhaDay).filter(QadhaDay.user_id == user_id)
+
+    if year:
+        query = query.filter(QadhaDay.ramadan_year == year)
+
+    if pending_only:
+        query = query.filter(QadhaDay.is_compensated == False)
+
+    records = query.order_by(QadhaDay.ramadan_year.desc(), QadhaDay.created_at.desc()).all()
+    return records
+
+
+@router.put("/qadha/{qadha_id}", response_model=QadhaResponse)
+async def update_qadha(
+    qadha_id: int,
+    qadha_data: QadhaUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a Qadha record (mark as compensated)."""
+    qadha = db.query(QadhaDay).filter(QadhaDay.id == qadha_id).first()
+    if not qadha:
+        raise HTTPException(status_code=404, detail="Qadha record not found")
+
+    # Validate belongs to family
+    validate_family_member(qadha.user_id, current_user, db)
+
+    for field, value in qadha_data.dict(exclude_unset=True).items():
+        setattr(qadha, field, value)
+
+    db.commit()
+    db.refresh(qadha)
+    return qadha
+
+
+@router.delete("/qadha/{qadha_id}")
+async def delete_qadha(
+    qadha_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a Qadha record."""
+    qadha = db.query(QadhaDay).filter(
+        QadhaDay.id == qadha_id,
+        QadhaDay.user_id == current_user.id
+    ).first()
+
+    if not qadha:
+        raise HTTPException(status_code=404, detail="Qadha record not found")
+
+    db.delete(qadha)
+    db.commit()
+    return {"message": "Qadha record deleted"}
+
+
+@router.get("/qadha/{user_id}/summary", response_model=QadhaSummaryResponse)
+async def get_qadha_summary(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get Qadha summary for a user."""
+    # Validate user belongs to same family (SECURITY FIX)
+    validate_family_member(user_id, current_user, db)
+
+    # Get all Qadha records
+    records = db.query(QadhaDay).filter(QadhaDay.user_id == user_id).all()
+
+    total_pending = sum(1 for r in records if not r.is_compensated)
+    total_completed = sum(1 for r in records if r.is_compensated)
+
+    # Group by year
+    by_year = {}
+    for r in records:
+        if r.ramadan_year not in by_year:
+            by_year[r.ramadan_year] = {"year": r.ramadan_year, "pending": 0, "completed": 0}
+        if r.is_compensated:
+            by_year[r.ramadan_year]["completed"] += 1
+        else:
+            by_year[r.ramadan_year]["pending"] += 1
+
+    return QadhaSummaryResponse(
+        user_id=user_id,
+        total_pending=total_pending,
+        total_completed=total_completed,
+        by_year=sorted(by_year.values(), key=lambda x: x["year"], reverse=True)
     )
 
 
@@ -679,7 +825,8 @@ async def add_zakat_payment(
         date=payment_data.date,
         amount=payment_data.amount,
         recipient=payment_data.recipient,
-        notes=payment_data.notes
+        notes=payment_data.notes,
+        is_recipient_private=payment_data.is_recipient_private
     )
     db.add(payment)
     db.commit()
@@ -693,7 +840,7 @@ async def get_zakat_payments(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all payments for a Zakat config."""
+    """Get all payments for a Zakat config. Hides private recipients from non-owners."""
     # Verify the config belongs to the user's family
     config = db.query(ZakatConfig).join(User, ZakatConfig.user_id == User.id).filter(
         ZakatConfig.id == config_id,
@@ -706,7 +853,59 @@ async def get_zakat_payments(
     payments = db.query(ZakatPayment).filter(
         ZakatPayment.config_id == config_id
     ).order_by(ZakatPayment.date.desc()).all()
-    return payments
+
+    # Hide recipient info if private and current user is not the owner
+    result = []
+    for payment in payments:
+        payment_dict = {
+            "id": payment.id,
+            "config_id": payment.config_id,
+            "user_id": payment.user_id,
+            "date": payment.date,
+            "amount": payment.amount,
+            "notes": payment.notes,
+            "is_recipient_private": payment.is_recipient_private,
+        }
+        # Show recipient only if not private or if current user is the owner
+        if not payment.is_recipient_private or payment.user_id == current_user.id:
+            payment_dict["recipient"] = payment.recipient
+        else:
+            payment_dict["recipient"] = "(Private)"
+        result.append(payment_dict)
+
+    return result
+
+
+@router.put("/zakat/payment/{payment_id}", response_model=ZakatPaymentResponse)
+async def update_zakat_payment(
+    payment_id: int,
+    payment_data: ZakatPaymentUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a Zakat payment. Only owner can update."""
+    payment = db.query(ZakatPayment).filter(
+        ZakatPayment.id == payment_id,
+        ZakatPayment.user_id == current_user.id  # Only owner can update
+    ).first()
+
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found or you don't have permission")
+
+    if payment_data.date is not None:
+        payment.date = payment_data.date
+    if payment_data.amount is not None:
+        payment.amount = payment_data.amount
+    if payment_data.recipient is not None:
+        payment.recipient = payment_data.recipient
+    if payment_data.notes is not None:
+        payment.notes = payment_data.notes
+    if payment_data.is_recipient_private is not None:
+        payment.is_recipient_private = payment_data.is_recipient_private
+
+    db.commit()
+    db.refresh(payment)
+    return payment
 
 
 @router.delete("/zakat/payment/{payment_id}")

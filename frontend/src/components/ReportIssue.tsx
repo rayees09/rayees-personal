@@ -31,7 +31,11 @@ export default function ReportIssue({ isOpen, onClose }: ReportIssueProps) {
     setLoading(true);
 
     try {
-      await api.post('/support/issues', formData);
+      const payload = {
+        ...formData,
+        contact_email: formData.contact_email.trim() || null
+      };
+      await api.post('/support/issues', payload);
       setSuccess(true);
       setFormData({ subject: '', description: '', category: 'general', contact_email: '' });
       setTimeout(() => {

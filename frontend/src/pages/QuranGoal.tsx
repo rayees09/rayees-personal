@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { quranGoalsApi, authApi } from '../services/api';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { BookOpen, Camera, Target, TrendingUp, Check, Plus, Calendar, Edit2, Trash2, X, ArrowRight } from 'lucide-react';
 
 export default function QuranGoal() {
@@ -199,7 +199,7 @@ export default function QuranGoal() {
           <div>
             <h2 className="text-xl font-bold">{goal.title}</h2>
             <p className="text-green-100">
-              {goal.target_days} days goal started {format(new Date(goal.start_date), 'MMM d')}
+              {goal.target_days} days goal started {format(parseISO(goal.start_date), 'MMM d')}
             </p>
           </div>
           <div className="flex items-start gap-4">
@@ -411,7 +411,7 @@ export default function QuranGoal() {
                   <>
                     <div className="flex items-center gap-3">
                       <Calendar size={16} className="text-gray-400" />
-                      <span>{format(new Date(log.date), 'MMM d, yyyy')}</span>
+                      <span>{format(parseISO(log.date), 'MMM d, yyyy')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -441,7 +441,7 @@ export default function QuranGoal() {
                   <>
                     <div className="flex items-center gap-3">
                       <Calendar size={16} className="text-gray-400" />
-                      <span>{format(new Date(log.date), 'MMM d, yyyy')}</span>
+                      <span>{format(parseISO(log.date), 'MMM d, yyyy')}</span>
                       {log.surah_name && (
                         <span className="text-sm text-gray-500">({log.surah_name})</span>
                       )}
@@ -593,7 +593,7 @@ function CreateGoalModal({ onClose }: { onClose: () => void }) {
 function EditGoalModal({ goal, onClose }: { goal: any; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [targetDays, setTargetDays] = useState(goal.target_days);
-  const [startDate, setStartDate] = useState(format(new Date(goal.start_date), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(format(parseISO(goal.start_date), 'yyyy-MM-dd'));
   const [currentPage, setCurrentPage] = useState(goal.current_page);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const totalPages = goal.total_pages || 604;
