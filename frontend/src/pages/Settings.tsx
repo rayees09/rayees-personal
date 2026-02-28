@@ -516,7 +516,6 @@ function GoogleSheetsSettings() {
   const [syncYear, setSyncYear] = useState(new Date().getFullYear());
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selectedFolder, setSelectedFolder] = useState('');
-  const [showFolderSelect, setShowFolderSelect] = useState(false);
 
   // Check URL params for OAuth callback
   useEffect(() => {
