@@ -552,7 +552,6 @@ function GoogleSheetsSettings() {
     mutationFn: (folderId: string) => syncApi.setFolder(folderId),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['google-sync-status'] });
-      setShowFolderSelect(false);
       setSyncMessage({ type: 'success', text: `Folder set to '${data.folder_name}'` });
     },
     onError: (err: any) => {
