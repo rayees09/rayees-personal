@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import date, time, datetime
 from enum import Enum
 
@@ -286,11 +286,11 @@ class ZakatPaymentCreate(BaseModel):
 
 
 class ZakatPaymentUpdate(BaseModel):
-    date: Optional[date] = None
-    amount: Optional[int] = None
-    recipient: Optional[str] = None
-    notes: Optional[str] = None
-    is_recipient_private: Optional[bool] = None
+    date: Union[date, None] = None
+    amount: Union[int, None] = None
+    recipient: Union[str, None] = None
+    notes: Union[str, None] = None
+    is_recipient_private: Union[bool, None] = None
 
 
 class ZakatPaymentResponse(BaseModel):
