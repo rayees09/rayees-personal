@@ -286,11 +286,11 @@ class ZakatPaymentCreate(BaseModel):
 
 
 class ZakatPaymentUpdate(BaseModel):
-    date: Union[date, None] = None
-    amount: Union[int, None] = None
-    recipient: Union[str, None] = None
-    notes: Union[str, None] = None
-    is_recipient_private: Union[bool, None] = None
+    date: date | None = None
+    amount: int | None = None
+    recipient: str | None = None
+    notes: str | None = None
+    is_recipient_private: bool | None = None
 
 
 class ZakatPaymentResponse(BaseModel):
