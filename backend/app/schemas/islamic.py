@@ -286,11 +286,11 @@ class ZakatPaymentCreate(BaseModel):
 
 
 class ZakatPaymentUpdate(BaseModel):
-    date: Optional[date] = Field(default=None)
-    amount: Optional[int] = Field(default=None)
-    recipient: Optional[str] = Field(default=None)
-    notes: Optional[str] = Field(default=None)
-    is_recipient_private: Optional[bool] = Field(default=None)
+    update_date: Optional[date] = None
+    amount: Optional[int] = None
+    recipient: Optional[str] = None
+    notes: Optional[str] = None
+    is_recipient_private: Optional[bool] = None
 
 
 class ZakatPaymentResponse(BaseModel):

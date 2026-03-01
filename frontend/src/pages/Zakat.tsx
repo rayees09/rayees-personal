@@ -96,7 +96,7 @@ export default function Zakat() {
   });
 
   const updatePaymentMutation = useMutation({
-    mutationFn: (data: { id: number; date?: string; amount?: number; recipient?: string; notes?: string; is_recipient_private?: boolean }) => {
+    mutationFn: (data: { id: number; update_date?: string; amount?: number; recipient?: string; notes?: string; is_recipient_private?: boolean }) => {
       const { id, ...rest } = data;
       return zakatApi.updatePayment(id, rest);
     },
@@ -706,7 +706,7 @@ export default function Zakat() {
                 <button
                   onClick={() => updatePaymentMutation.mutate({
                     id: editingPayment.id,
-                    date: editingPayment.date,
+                    update_date: editingPayment.date,
                     amount: editingPayment.amount,
                     recipient: editingPayment.recipient,
                     notes: editingPayment.notes,

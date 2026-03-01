@@ -892,8 +892,8 @@ async def update_zakat_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found or you don't have permission")
 
-    if payment_data.date is not None:
-        payment.date = payment_data.date
+    if payment_data.update_date is not None:
+        payment.date = payment_data.update_date
     if payment_data.amount is not None:
         payment.amount = payment_data.amount
     if payment_data.recipient is not None:
