@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 from datetime import datetime
+import httpx
 
 from app.database import get_db
 from app.models.support import Issue, ActivityLog, IssueStatus, IssuePriority
@@ -17,6 +18,9 @@ from app.schemas.support import (
 )
 
 router = APIRouter(prefix="/api/support", tags=["Support"])
+
+# Simple in-memory cache for IP lookups (to avoid repeated API calls)
+_ip_cache: dict = {}
 
 
 # ============== HELPER FUNCTIONS ==============
@@ -41,6 +45,39 @@ def parse_user_agent(user_agent: str) -> str:
     return "desktop"
 
 
+async def get_location_from_ip(ip: str) -> tuple[Optional[str], Optional[str]]:
+    """Get country and city from IP address using free API."""
+    global _ip_cache
+
+    if not ip or ip in ("127.0.0.1", "localhost", "::1"):
+        return None, None
+
+    # Check cache first
+    if ip in _ip_cache:
+        cached = _ip_cache[ip]
+        return cached.get("country"), cached.get("city")
+
+    try:
+        # Use ip-api.com (free, 45 requests/minute limit)
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(f"http://ip-api.com/json/{ip}?fields=status,country,city")
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    country = data.get("country")
+                    city = data.get("city")
+                    # Cache the result
+                    _ip_cache[ip] = {"country": country, "city": city}
+                    # Keep cache size reasonable
+                    if len(_ip_cache) > 1000:
+                        _ip_cache = dict(list(_ip_cache.items())[-500:])
+                    return country, city
+    except Exception:
+        pass
+
+    return None, None
+
+
 async def log_activity(
     db: Session,
     action: str,
@@ -51,15 +88,20 @@ async def log_activity(
     country: str = None,
     city: str = None
 ):
-    """Log user activity."""
+    """Log user activity with automatic IP geolocation."""
     user_agent = request.headers.get("User-Agent", "")
+    ip_address = get_client_ip(request)
+
+    # If country/city not provided, try to look them up from IP
+    if not country and not city and ip_address:
+        country, city = await get_location_from_ip(ip_address)
 
     log = ActivityLog(
         user_id=user_id,
         family_id=family_id,
         action=action,
         details=details,
-        ip_address=get_client_ip(request),
+        ip_address=ip_address,
         country=country,
         city=city,
         user_agent=user_agent[:500] if user_agent else None,

@@ -1,9 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
-import { zakatApi } from '../services/api';
+import { zakatApi, settingsApi } from '../services/api';
 import { format, parseISO } from 'date-fns';
-import { Coins, Plus, Trash2, X, CheckCircle, Edit2, RefreshCw, EyeOff } from 'lucide-react';
+import { Coins, Plus, Trash2, X, CheckCircle, Edit2, EyeOff } from 'lucide-react';
+
+// Currency options with symbols
+const CURRENCIES = [
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
+  { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
+  { code: 'SAR', symbol: '﷼', name: 'Saudi Riyal' },
+  { code: 'QAR', symbol: '﷼', name: 'Qatari Riyal' },
+  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  { code: 'GBP', symbol: '£', name: 'British Pound' },
+  { code: 'EUR', symbol: '€', name: 'Euro' },
+  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+];
 
 export default function Zakat() {
   const user = useAuthStore((state) => state.user);
@@ -15,12 +28,27 @@ export default function Zakat() {
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [selectedConfigId, setSelectedConfigId] = useState<number | null>(null);
 
+  // Fetch app settings for default currency
+  const { data: appSettings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: settingsApi.getAll,
+  });
+
+  const defaultCurrency = appSettings?.default_currency || 'USD';
+
   const [configForm, setConfigForm] = useState({
     year: currentYear,
     total_due: 0,
     currency: 'USD',
     notes: '',
   });
+
+  // Update config form currency when default currency is loaded
+  useEffect(() => {
+    if (defaultCurrency) {
+      setConfigForm(prev => ({ ...prev, currency: defaultCurrency }));
+    }
+  }, [defaultCurrency]);
 
   const [editForm, setEditForm] = useState({
     total_due: 0,
@@ -39,12 +67,6 @@ export default function Zakat() {
   const [showEditPayment, setShowEditPayment] = useState(false);
   const [editingPayment, setEditingPayment] = useState<any>(null);
 
-  // Currency conversion states
-  const [inputCurrency, setInputCurrency] = useState('USD');
-  const [inputAmount, setInputAmount] = useState<number>(0);
-  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
-  const [loadingRate, setLoadingRate] = useState(false);
-
   const { data: configs, isLoading } = useQuery({
     queryKey: ['zakat-configs'],
     queryFn: () => zakatApi.getConfigs(),
@@ -61,7 +83,7 @@ export default function Zakat() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zakat-configs'] });
       setShowAddConfig(false);
-      setConfigForm({ year: currentYear, total_due: 0, currency: 'USD', notes: '' });
+      setConfigForm({ year: currentYear, total_due: 0, currency: defaultCurrency, notes: '' });
     },
   });
 
@@ -89,9 +111,6 @@ export default function Zakat() {
       queryClient.invalidateQueries({ queryKey: ['zakat-payments'] });
       setShowAddPayment(false);
       setPaymentForm({ date: format(new Date(), 'yyyy-MM-dd'), amount: 0, recipient: '', notes: '', is_recipient_private: false });
-      setInputCurrency('USD');
-      setInputAmount(0);
-      setExchangeRate(null);
     },
   });
 
@@ -119,43 +138,8 @@ export default function Zakat() {
   const selectedConfig = configs?.find((c: any) => c.id === selectedConfigId);
   const years = Array.from({ length: 6 }, (_, i) => currentYear + i);
 
-  // Fetch exchange rate when input currency changes
-  useEffect(() => {
-    const fetchExchangeRate = async () => {
-      if (inputCurrency === 'USD' || !selectedConfig) {
-        setExchangeRate(null);
-        return;
-      }
-
-      setLoadingRate(true);
-      try {
-        // Using free exchange rate API
-        const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${inputCurrency}`);
-        const data = await response.json();
-        const rate = data.rates[selectedConfig.currency] || data.rates['USD'];
-        setExchangeRate(rate);
-      } catch (error) {
-        console.error('Failed to fetch exchange rate:', error);
-        // Fallback rates (approximate)
-        const fallbackRates: Record<string, number> = {
-          'INR': 0.012, // 1 INR = 0.012 USD
-          'AED': 0.27,
-          'SAR': 0.27,
-          'GBP': 1.27,
-          'EUR': 1.08,
-        };
-        setExchangeRate(fallbackRates[inputCurrency] || 1);
-      }
-      setLoadingRate(false);
-    };
-
-    fetchExchangeRate();
-  }, [inputCurrency, selectedConfig]);
-
-  // Calculate converted amount
-  const convertedAmount = exchangeRate && inputAmount
-    ? Math.round(inputAmount * exchangeRate)
-    : inputAmount;
+  // The target currency for all Zakat is the user's default currency setting
+  const targetCurrency = defaultCurrency;
 
   const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-IN', {
@@ -223,20 +207,20 @@ export default function Zakat() {
                     <h3 className="font-bold text-lg">Zakat {config.year}</h3>
                     {isCompleted && <CheckCircle size={24} />}
                   </div>
-                  <p className="text-2xl font-bold">{formatCurrency(config.total_due, config.currency)}</p>
+                  <p className="text-2xl font-bold">{formatCurrency(config.total_due, targetCurrency)}</p>
                 </div>
 
                 <div className="p-4">
                   <div className="flex justify-between text-sm mb-2">
                     <span className="text-gray-600">Paid</span>
                     <span className="font-semibold text-green-600">
-                      {formatCurrency(config.total_paid, config.currency)}
+                      {formatCurrency(config.total_paid, targetCurrency)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm mb-3">
                     <span className="text-gray-600">Remaining</span>
                     <span className={`font-semibold ${config.remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                      {formatCurrency(config.remaining, config.currency)}
+                      {formatCurrency(config.remaining, targetCurrency)}
                     </span>
                   </div>
 
@@ -308,9 +292,14 @@ export default function Zakat() {
                 {payments?.map((payment: any) => (
                   <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
-                      <p className="font-semibold text-green-600">
-                        {formatCurrency(payment.amount, selectedConfig.currency)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-green-600">
+                          {formatCurrency(payment.amount, selectedConfig.currency)}
+                        </p>
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                          {payment.paid_by}
+                        </span>
+                      </div>
                       <p className="text-sm text-gray-500 flex items-center gap-1">
                         {format(parseISO(payment.date), 'MMM d, yyyy')}
                         {payment.recipient && (
@@ -400,12 +389,9 @@ export default function Zakat() {
                   onChange={(e) => setConfigForm({ ...configForm, currency: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
-                  <option value="USD">USD (US Dollar)</option>
-                  <option value="INR">INR (Indian Rupee)</option>
-                  <option value="AED">AED (UAE Dirham)</option>
-                  <option value="SAR">SAR (Saudi Riyal)</option>
-                  <option value="GBP">GBP (British Pound)</option>
-                  <option value="EUR">EUR (Euro)</option>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.code} ({c.name})</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -459,12 +445,9 @@ export default function Zakat() {
                   onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
-                  <option value="USD">USD (US Dollar)</option>
-                  <option value="INR">INR (Indian Rupee)</option>
-                  <option value="AED">AED (UAE Dirham)</option>
-                  <option value="SAR">SAR (Saudi Riyal)</option>
-                  <option value="GBP">GBP (British Pound)</option>
-                  <option value="EUR">EUR (Euro)</option>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.code} ({c.name})</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -510,77 +493,18 @@ export default function Zakat() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Enter Amount In</label>
-                <select
-                  value={inputCurrency}
-                  onChange={(e) => {
-                    setInputCurrency(e.target.value);
-                    setInputAmount(0);
-                    setPaymentForm({ ...paymentForm, amount: 0 });
-                  }}
-                  className="w-full px-3 py-2 border rounded-lg"
-                >
-                  <option value="USD">USD (US Dollar)</option>
-                  <option value="INR">INR (Indian Rupee) - Auto Convert</option>
-                  <option value="AED">AED (UAE Dirham) - Auto Convert</option>
-                  <option value="SAR">SAR (Saudi Riyal) - Auto Convert</option>
-                  <option value="GBP">GBP (British Pound) - Auto Convert</option>
-                  <option value="EUR">EUR (Euro) - Auto Convert</option>
-                </select>
-              </div>
-              <div>
                 <label className="block text-sm font-medium mb-1">
-                  Amount ({inputCurrency})
+                  Amount ({targetCurrency})
                 </label>
                 <input
                   type="number"
                   min="0"
-                  value={inputAmount || ''}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value) || 0;
-                    setInputAmount(val);
-                    if (inputCurrency === selectedConfig?.currency || inputCurrency === 'USD') {
-                      setPaymentForm({ ...paymentForm, amount: Math.round(val) });
-                    } else if (exchangeRate) {
-                      setPaymentForm({ ...paymentForm, amount: Math.round(val * exchangeRate) });
-                    }
-                  }}
+                  value={paymentForm.amount || ''}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: parseInt(e.target.value) || 0 })}
                   placeholder="Enter amount"
                   className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
-
-              {/* Show conversion info */}
-              {inputCurrency !== 'USD' && (
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="font-medium text-blue-800">Today's Exchange Rate</span>
-                    {loadingRate && (
-                      <RefreshCw size={14} className="animate-spin text-blue-600" />
-                    )}
-                  </div>
-                  <div className="text-blue-700">
-                    {loadingRate ? (
-                      <span>Fetching live rate...</span>
-                    ) : exchangeRate ? (
-                      <span className="text-lg font-semibold">
-                        1 {inputCurrency} = ${exchangeRate.toFixed(4)} USD
-                      </span>
-                    ) : (
-                      'Rate unavailable'
-                    )}
-                  </div>
-                  {inputAmount > 0 && exchangeRate && (
-                    <div className="mt-2 p-2 bg-green-100 rounded border border-green-300">
-                      <p className="text-sm text-green-700">You entered: {inputAmount.toLocaleString()} {inputCurrency}</p>
-                      <p className="text-xl font-bold text-green-800">
-                        = ${convertedAmount.toLocaleString()} USD
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div>
                 <label className="block text-sm font-medium mb-1">Recipient (optional)</label>
                 <input
@@ -614,19 +538,11 @@ export default function Zakat() {
                 </div>
               </label>
               <button
-                onClick={() => {
-                  // Use converted amount (always save in USD)
-                  const finalAmount = inputCurrency !== 'USD' && exchangeRate
-                    ? Math.round(inputAmount * exchangeRate)
-                    : Math.round(inputAmount);
-                  addPaymentMutation.mutate({ ...paymentForm, amount: finalAmount });
-                }}
-                disabled={!inputAmount || addPaymentMutation.isPending || (inputCurrency !== 'USD' && !exchangeRate)}
+                onClick={() => addPaymentMutation.mutate(paymentForm)}
+                disabled={!paymentForm.amount || addPaymentMutation.isPending}
                 className="w-full py-2 bg-islamic-green text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
               >
-                {addPaymentMutation.isPending ? 'Adding...' : inputCurrency !== 'USD' && exchangeRate
-                  ? `Add Payment ($${convertedAmount.toLocaleString()} USD)`
-                  : 'Add Payment'}
+                {addPaymentMutation.isPending ? 'Adding...' : `Add Payment (${formatCurrency(paymentForm.amount || 0, targetCurrency)})`}
               </button>
             </div>
           </div>
@@ -654,7 +570,7 @@ export default function Zakat() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Amount ({selectedConfig?.currency || 'USD'})</label>
+                <label className="block text-sm font-medium mb-1">Amount ({targetCurrency || 'USD'})</label>
                 <input
                   type="number"
                   min="0"

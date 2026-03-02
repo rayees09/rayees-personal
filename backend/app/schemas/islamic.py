@@ -66,7 +66,6 @@ class FastingStatus(str, Enum):
 class MissedReason(str, Enum):
     ILLNESS = "illness"
     TRAVEL = "travel"
-    MENSTRUATION = "menstruation"
     OTHER = "other"
 
 

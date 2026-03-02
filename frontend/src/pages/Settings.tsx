@@ -3,11 +3,34 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { authApi, settingsApi, familyApi, syncApi } from '../services/api';
-import { Settings as SettingsIcon, User, Lock, Save, Eye, EyeOff, Users, Moon, Calendar, Sun, Palette, ToggleLeft, ToggleRight, FileSpreadsheet, Trash2, Check, AlertCircle, RefreshCw } from 'lucide-react';
+import { Settings as SettingsIcon, User, Lock, Save, Eye, EyeOff, Users, Moon, Calendar, Sun, Palette, ToggleLeft, ToggleRight, FileSpreadsheet, Trash2, Check, AlertCircle, RefreshCw, DollarSign, Globe } from 'lucide-react';
+
+// Settings tabs
+const TABS = [
+  { id: 'general', label: 'General', icon: Palette },
+  { id: 'family', label: 'Family', icon: Users },
+  { id: 'features', label: 'Features', icon: ToggleRight },
+  { id: 'ramadan', label: 'Ramadan', icon: Moon },
+  { id: 'sync', label: 'Google Sync', icon: FileSpreadsheet },
+];
+
+// Currency options
+const CURRENCIES = [
+  { code: 'USD', name: 'US Dollar', symbol: '$', country: 'United States' },
+  { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', country: 'UAE' },
+  { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼', country: 'Saudi Arabia' },
+  { code: 'QAR', name: 'Qatari Riyal', symbol: '﷼', country: 'Qatar' },
+  { code: 'INR', name: 'Indian Rupee', symbol: '₹', country: 'India' },
+  { code: 'GBP', name: 'British Pound', symbol: '£', country: 'United Kingdom' },
+  { code: 'EUR', name: 'Euro', symbol: '€', country: 'Europe' },
+  { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', country: 'Canada' },
+  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', country: 'Australia' },
+];
 
 export default function Settings() {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('general');
   const [editingUser, setEditingUser] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -80,7 +103,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-3">
         <SettingsIcon className="text-islamic-green" size={28} />
         <h1 className="text-2xl font-bold dark:text-white">Settings</h1>
@@ -92,166 +115,300 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Family Members Management */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm transition-colors duration-200">
-        <div className="p-4 border-b dark:border-gray-700 flex items-center gap-2">
-          <Users size={20} className="text-islamic-green" />
-          <h2 className="font-semibold dark:text-white">Family Members</h2>
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible md:pb-0">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition ${
+                activeTab === tab.id
+                  ? 'bg-islamic-green text-white'
+                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Icon size={18} />
+              <span className="text-sm font-medium">{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab Content */}
+      <div className="space-y-6">
+        {activeTab === 'general' && (
+          <>
+            {/* Appearance Settings */}
+            <AppearanceSettings />
+
+            {/* Currency Settings */}
+            <CurrencySettings />
+
+            {/* Current User Info */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 transition-colors duration-200">
+              <div className="flex items-center gap-2 mb-4">
+                <User size={20} className="text-islamic-green" />
+                <h2 className="font-semibold dark:text-white">Your Account</h2>
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                <p><strong className="dark:text-white">Logged in as:</strong> {user?.name}</p>
+                <p><strong className="dark:text-white">Email:</strong> {user?.email}</p>
+                <p><strong className="dark:text-white">Role:</strong> {user?.role}</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'family' && (
+          <FamilyMembersSettings
+            familyMembers={familyMembers}
+            isLoading={isLoading}
+            editingUser={editingUser}
+            setEditingUser={setEditingUser}
+            formData={formData}
+            setFormData={setFormData}
+            showPassword={showPassword}
+            setShowPassword={setShowPassword}
+            handleEdit={handleEdit}
+            handleSave={handleSave}
+            updateUserMutation={updateUserMutation}
+          />
+        )}
+
+        {activeTab === 'features' && <FeatureSettings />}
+
+        {activeTab === 'ramadan' && <RamadanSettings />}
+
+        {activeTab === 'sync' && <GoogleSheetsSettings />}
+      </div>
+    </div>
+  );
+}
+
+// Currency Settings Component
+function CurrencySettings() {
+  const queryClient = useQueryClient();
+  const [saved, setSaved] = useState(false);
+
+  const { data: settings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: settingsApi.getAll,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (currency: string) => settingsApi.set('default_currency', currency),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['app-settings'] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    },
+  });
+
+  const currentCurrency = settings?.default_currency || 'USD';
+  const selectedCurrencyInfo = CURRENCIES.find(c => c.code === currentCurrency);
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm transition-colors duration-200">
+      <div className="p-4 border-b dark:border-gray-700 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DollarSign size={20} className="text-islamic-green" />
+          <h2 className="font-semibold dark:text-white">Default Currency</h2>
+        </div>
+        {saved && <span className="text-sm text-green-600 dark:text-green-400">Saved!</span>}
+      </div>
+
+      <div className="p-4 space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Set your default currency for Zakat calculations and payments.
+        </p>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {CURRENCIES.map((currency) => (
+            <button
+              key={currency.code}
+              onClick={() => saveMutation.mutate(currency.code)}
+              disabled={saveMutation.isPending}
+              className={`p-3 rounded-lg border-2 transition text-left ${
+                currentCurrency === currency.code
+                  ? 'border-islamic-green bg-islamic-light dark:bg-green-900/30'
+                  : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-lg dark:text-white">{currency.symbol}</span>
+                {currentCurrency === currency.code && (
+                  <Check size={16} className="text-islamic-green" />
+                )}
+              </div>
+              <p className="font-medium text-sm dark:text-white">{currency.code}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{currency.country}</p>
+            </button>
+          ))}
         </div>
 
-        <div className="p-4 space-y-4">
-          {isLoading ? (
-            <p className="text-gray-500">Loading...</p>
-          ) : (
-            familyMembers?.map((member: any) => (
-              <div
-                key={member.id}
-                className="border dark:border-gray-700 rounded-lg p-4"
-              >
-                {editingUser?.id === member.id ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
-                        member.role === 'parent' ? 'bg-islamic-green' : 'bg-yellow-400'
-                      }`}>
-                        {member.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-semibold dark:text-white">{member.name}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{member.role}</p>
-                      </div>
+        {selectedCurrencyInfo && (
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              <Globe size={14} className="inline mr-1" />
+              Zakat amounts will be displayed in <strong>{selectedCurrencyInfo.name} ({selectedCurrencyInfo.code})</strong>
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Family Members Settings Component
+function FamilyMembersSettings({
+  familyMembers,
+  isLoading,
+  editingUser,
+  setEditingUser,
+  formData,
+  setFormData,
+  showPassword,
+  setShowPassword,
+  handleEdit,
+  handleSave,
+  updateUserMutation,
+}: any) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm transition-colors duration-200">
+      <div className="p-4 border-b dark:border-gray-700 flex items-center gap-2">
+        <Users size={20} className="text-islamic-green" />
+        <h2 className="font-semibold dark:text-white">Family Members</h2>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {isLoading ? (
+          <p className="text-gray-500">Loading...</p>
+        ) : (
+          familyMembers?.map((member: any) => (
+            <div
+              key={member.id}
+              className="border dark:border-gray-700 rounded-lg p-4"
+            >
+              {editingUser?.id === member.id ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
+                      member.role === 'parent' ? 'bg-islamic-green' : 'bg-yellow-400'
+                    }`}>
+                      {member.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-semibold dark:text-white">{member.name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{member.role}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1 dark:text-gray-200">Name</label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white"
+                      />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {member.role === 'parent' && (
                       <div>
-                        <label className="block text-sm font-medium mb-1 dark:text-gray-200">Name</label>
+                        <label className="block text-sm font-medium mb-1 dark:text-gray-200">Email</label>
                         <input
-                          type="text"
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                           className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white"
                         />
                       </div>
+                    )}
 
-                      {member.role === 'parent' && (
-                        <div>
-                          <label className="block text-sm font-medium mb-1 dark:text-gray-200">Email</label>
-                          <input
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white"
-                          />
-                        </div>
-                      )}
-
-                      {member.role === 'child' && (
-                        <div>
-                          <label className="block text-sm font-medium mb-1 dark:text-gray-200">Username</label>
-                          <input
-                            type="text"
-                            value={formData.username}
-                            onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
-                            placeholder="Enter username for login"
-                            className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                          />
-                        </div>
-                      )}
-
+                    {member.role === 'child' && (
                       <div>
-                        <label className="block text-sm font-medium mb-1 dark:text-gray-200">New Password</label>
-                        <div className="relative">
-                          <input
-                            type={showPassword ? 'text' : 'password'}
-                            value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            placeholder="Leave blank to keep current"
-                            className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg pr-10 bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                          >
-                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                          </button>
-                        </div>
+                        <label className="block text-sm font-medium mb-1 dark:text-gray-200">Username</label>
+                        <input
+                          type="text"
+                          value={formData.username}
+                          onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
+                          placeholder="Enter username for login"
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                        />
                       </div>
-                    </div>
+                    )}
 
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setEditingUser(null)}
-                        className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSave}
-                        disabled={updateUserMutation.isPending}
-                        className="px-4 py-2 bg-islamic-green text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
-                      >
-                        <Save size={18} />
-                        {updateUserMutation.isPending ? 'Saving...' : 'Save'}
-                      </button>
+                    <div>
+                      <label className="block text-sm font-medium mb-1 dark:text-gray-200">New Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          placeholder="Leave blank to keep current"
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg pr-10 bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
-                        member.role === 'parent' ? 'bg-islamic-green' : 'bg-yellow-400'
-                      }`}>
-                        {member.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-semibold dark:text-white">{member.name}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {member.role === 'parent' ? member.email : member.username ? `@${member.username}` : 'No username set'}
-                        </p>
-                        {member.school && (
-                          <p className="text-xs text-gray-400 dark:text-gray-500">{member.school} - {member.grade}</p>
-                        )}
-                      </div>
-                    </div>
+
+                  <div className="flex gap-2 justify-end">
                     <button
-                      onClick={() => handleEdit(member)}
-                      className="px-4 py-2 text-islamic-green border border-islamic-green rounded-lg hover:bg-islamic-light flex items-center gap-2"
+                      onClick={() => setEditingUser(null)}
+                      className="px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200"
                     >
-                      <Lock size={16} />
-                      Edit
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={updateUserMutation.isPending}
+                      className="px-4 py-2 bg-islamic-green text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Save size={18} />
+                      {updateUserMutation.isPending ? 'Saving...' : 'Save'}
                     </button>
                   </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Appearance Settings */}
-      <AppearanceSettings />
-
-      {/* Feature Management */}
-      <FeatureSettings />
-
-      {/* Ramadan Settings */}
-      <RamadanSettings />
-
-      {/* Google Sheets Sync */}
-      <GoogleSheetsSettings />
-
-      {/* Current User Info */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 transition-colors duration-200">
-        <div className="flex items-center gap-2 mb-4">
-          <User size={20} className="text-islamic-green" />
-          <h2 className="font-semibold dark:text-white">Your Account</h2>
-        </div>
-        <div className="text-sm text-gray-600 dark:text-gray-300">
-          <p><strong className="dark:text-white">Logged in as:</strong> {user?.name}</p>
-          <p><strong className="dark:text-white">Email:</strong> {user?.email}</p>
-          <p><strong className="dark:text-white">Role:</strong> {user?.role}</p>
-        </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
+                      member.role === 'parent' ? 'bg-islamic-green' : 'bg-yellow-400'
+                    }`}>
+                      {member.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-semibold dark:text-white">{member.name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {member.role === 'parent' ? member.email : member.username ? `@${member.username}` : 'No username set'}
+                      </p>
+                      {member.school && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">{member.school} - {member.grade}</p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleEdit(member)}
+                    className="px-4 py-2 text-islamic-green border border-islamic-green rounded-lg hover:bg-islamic-light flex items-center gap-2"
+                  >
+                    <Lock size={16} />
+                    Edit
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

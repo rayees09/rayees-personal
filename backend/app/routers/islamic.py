@@ -855,12 +855,18 @@ async def get_zakat_payments(
     ).order_by(ZakatPayment.date.desc()).all()
 
     # Hide recipient info if private and current user is not the owner
+    # Get user names for all payments
+    user_ids = list(set(p.user_id for p in payments))
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    user_names = {u.id: u.name for u in users}
+
     result = []
     for payment in payments:
         payment_dict = {
             "id": payment.id,
             "config_id": payment.config_id,
             "user_id": payment.user_id,
+            "paid_by": user_names.get(payment.user_id, "Unknown"),
             "date": payment.date,
             "amount": payment.amount,
             "notes": payment.notes,

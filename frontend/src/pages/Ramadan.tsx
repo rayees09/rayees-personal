@@ -441,7 +441,7 @@ export default function Ramadan() {
               <div className="mt-3 p-3 bg-red-50 rounded-lg">
                 <p className="text-sm font-medium text-red-800 mb-2">Reason for missing:</p>
                 <div className="flex flex-wrap gap-2">
-                  {['illness', 'travel', 'menstruation', 'other'].map((reason) => (
+                  {['illness', 'travel', 'other'].map((reason) => (
                     <button
                       key={reason}
                       onClick={() => {
@@ -873,7 +873,7 @@ export default function Ramadan() {
               <div>
                 <label className="block text-sm font-medium mb-1">Reason for Missing</label>
                 <div className="flex flex-wrap gap-2">
-                  {['illness', 'travel', 'menstruation', 'other'].map((reason) => (
+                  {['illness', 'travel', 'other'].map((reason) => (
                     <button
                       key={reason}
                       type="button"
@@ -1103,7 +1103,7 @@ function AddQadhaModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           <div>
             <label className="block text-sm font-medium mb-1">Reason for Missing</label>
             <div className="flex flex-wrap gap-2">
-              {['illness', 'travel', 'menstruation', 'other'].map((reason) => (
+              {['illness', 'travel', 'other'].map((reason) => (
                 <button
                   key={reason}
                   type="button"

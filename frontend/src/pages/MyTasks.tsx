@@ -2,39 +2,45 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { quickTasksApi } from '../services/api';
 import { format } from 'date-fns';
-import { Plus, Briefcase, User, Building2, DollarSign, Users, X, Clock, Edit2, Trash2, Eye, CheckCircle, Sun, ChevronUp, ChevronDown, RotateCcw, ExternalLink, Link2 } from 'lucide-react';
+import { Plus, Briefcase, User, Building2, DollarSign, Users, X, Clock, Edit2, Trash2, CheckCircle, Sun, ChevronUp, ChevronDown, RotateCcw, ExternalLink, Link2 } from 'lucide-react';
 
 // Helper to detect and render URLs as clickable links
 function renderTextWithLinks(text: string) {
   if (!text) return null;
 
-  // URL regex pattern
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  // URL regex pattern - match URLs until whitespace or newline
+  const urlRegex = /(https?:\/\/[^\s\n]+)/g;
   const parts = text.split(urlRegex);
 
   return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      // Extract domain for display
+    // Check if this part looks like a URL
+    if (part.startsWith('http://') || part.startsWith('https://')) {
       try {
         const url = new URL(part);
+        // Show domain + truncated path (include all parts)
+        const displayPath = url.pathname + url.search + url.hash;
+        const truncatedPath = displayPath.length > 25
+          ? displayPath.substring(0, 25) + '...'
+          : displayPath;
         return (
           <a
             key={index}
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline break-all"
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline my-1 p-2 bg-blue-50 rounded-lg"
           >
             <Link2 size={12} className="flex-shrink-0" />
-            <span>{url.hostname}{url.pathname !== '/' ? url.pathname.substring(0, 30) + (url.pathname.length > 30 ? '...' : '') : ''}</span>
+            <span className="truncate">{url.hostname}{truncatedPath !== '/' ? truncatedPath : ''}</span>
             <ExternalLink size={10} className="flex-shrink-0" />
           </a>
         );
       } catch {
-        return part;
+        return <span key={index}>{part}</span>;
       }
     }
-    return part;
+    // For non-URL text, render normally
+    return part ? <span key={index}>{part}</span> : null;
   });
 }
 
@@ -196,8 +202,8 @@ export default function MyTasks() {
         </div>
       </form>
 
-      {/* Category Summary */}
-      <div className="grid grid-cols-5 gap-2">
+      {/* Category Summary - Horizontal scroll on mobile */}
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 md:grid md:grid-cols-5 md:overflow-visible md:pb-0">
         {CATEGORIES.map((cat) => {
           const Icon = cat.icon;
           const count = byCategory?.[cat.id]?.length || 0;
@@ -207,7 +213,7 @@ export default function MyTasks() {
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(isSelected ? null : cat.id)}
-              className={`p-2 rounded-lg transition text-center ${
+              className={`flex-shrink-0 w-20 md:w-auto p-2 rounded-lg transition text-center ${
                 isSelected
                   ? 'bg-islamic-green text-white'
                   : 'bg-white shadow-sm hover:shadow-md'
@@ -260,9 +266,9 @@ export default function MyTasks() {
                     task.is_today ? 'border-amber-500 bg-amber-50' : 'border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    {/* Move buttons */}
-                    <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    {/* Move buttons - hidden on mobile */}
+                    <div className="hidden md:flex flex-col">
                       <button
                         onClick={() => moveTask(task.id, 'up')}
                         disabled={index === 0}
@@ -279,33 +285,41 @@ export default function MyTasks() {
                       </button>
                     </div>
 
-                    {/* Task content */}
-                    <div className="flex-1 min-w-0">
+                    {/* Task content - clickable to view details */}
+                    <div
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => setViewingTask(task)}
+                    >
                       <p className="font-medium truncate">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-xs px-2 py-0.5 rounded ${cat?.color}`}>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${cat?.color}`}>
                           {cat?.label}
                         </span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${priority?.color}`}>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${priority?.color}`}>
                           {priority?.label}
                         </span>
                         {task.due_date && (
                           <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <Clock size={12} />
+                            <Clock size={10} />
                             {format(new Date(task.due_date), 'MMM d')}
                           </span>
                         )}
                         {task.is_today && (
                           <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
-                            <Sun size={12} />
+                            <Sun size={10} />
                             Today
+                          </span>
+                        )}
+                        {task.notes && (
+                          <span className="flex items-center gap-1 text-xs text-blue-500">
+                            <Link2 size={10} />
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Action icons with colors */}
-                    <div className="flex items-center gap-1">
+                    {/* Action icons - simplified for mobile */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {/* Mark for Today */}
                       <button
                         onClick={() => toggleTodayMutation.mutate(task.id)}
@@ -317,14 +331,6 @@ export default function MyTasks() {
                         title={task.is_today ? 'Remove from Today' : 'Mark for Today'}
                       >
                         <Sun size={16} />
-                      </button>
-                      {/* View Details */}
-                      <button
-                        onClick={() => setViewingTask(task)}
-                        className="p-1.5 bg-blue-50 text-blue-400 hover:bg-blue-100 hover:text-blue-600 rounded"
-                        title="View Details"
-                      >
-                        <Eye size={16} />
                       </button>
                       {/* Mark Complete */}
                       <button
@@ -338,22 +344,22 @@ export default function MyTasks() {
                       >
                         <CheckCircle size={16} />
                       </button>
-                      {/* Edit */}
+                      {/* Edit - hidden on mobile, access via View modal */}
                       <button
                         onClick={() => setEditingTask(task)}
-                        className="p-1.5 bg-purple-50 text-purple-400 hover:bg-purple-100 hover:text-purple-600 rounded"
+                        className="hidden md:block p-1.5 bg-purple-50 text-purple-400 hover:bg-purple-100 hover:text-purple-600 rounded"
                         title="Edit"
                       >
                         <Edit2 size={16} />
                       </button>
-                      {/* Delete */}
+                      {/* Delete - hidden on mobile */}
                       <button
                         onClick={() => {
                           if (confirm('Delete this task?')) {
                             deleteMutation.mutate(task.id);
                           }
                         }}
-                        className="p-1.5 bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 rounded"
+                        className="hidden md:block p-1.5 bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 rounded"
                         title="Delete"
                       >
                         <Trash2 size={16} />
@@ -397,6 +403,12 @@ export default function MyTasks() {
           onComplete={() => {
             if (confirm(`Mark "${viewingTask.title}" as done?`)) {
               completeMutation.mutate(viewingTask.id);
+              setViewingTask(null);
+            }
+          }}
+          onDelete={() => {
+            if (confirm('Delete this task?')) {
+              deleteMutation.mutate(viewingTask.id);
               setViewingTask(null);
             }
           }}
@@ -673,29 +685,31 @@ function ViewTaskModal({
   onClose,
   onEdit,
   onComplete,
+  onDelete,
 }: {
   task: any;
   onClose: () => void;
   onEdit: () => void;
   onComplete: () => void;
+  onDelete: () => void;
 }) {
   const cat = CATEGORIES.find((c) => c.id === task.category);
   const priority = PRIORITIES.find((p) => p.id === task.priority);
   const CatIcon = cat?.icon || User;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <h2 className="font-semibold text-sm">Task Details</h2>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
+          <h2 className="font-semibold">Task Details</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-3 overflow-y-auto flex-1">
           {/* Title */}
-          <h3 className="font-semibold">{task.title}</h3>
+          <h3 className="font-semibold text-lg">{task.title}</h3>
 
           {/* Category & Priority */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -725,33 +739,42 @@ function ViewTaskModal({
           {/* Notes */}
           {task.notes && (
             <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
-                <Link2 size={10} />
+              <p className="text-xs text-gray-500 mb-2 flex items-center gap-1 font-medium">
+                <Link2 size={12} />
                 Notes
               </p>
-              <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+              <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed space-y-1">
                 {renderTextWithLinks(task.notes)}
               </div>
             </div>
           )}
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
+        {/* Actions - Fixed at bottom */}
+        <div className="p-4 border-t flex-shrink-0 bg-white space-y-2">
+          <div className="flex gap-2">
             <button
               onClick={onEdit}
-              className="flex-1 py-1.5 border border-blue-500 text-blue-500 rounded hover:bg-blue-50 flex items-center justify-center gap-1.5 text-sm"
+              className="flex-1 py-2 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 flex items-center justify-center gap-1.5"
             >
-              <Edit2 size={14} />
+              <Edit2 size={16} />
               Edit
             </button>
             <button
               onClick={onComplete}
-              className="flex-1 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center gap-1.5 text-sm"
+              className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center justify-center gap-1.5"
             >
-              <CheckCircle size={14} />
+              <CheckCircle size={16} />
               Done
             </button>
           </div>
+          <button
+            onClick={onDelete}
+            className="w-full py-2 border border-red-300 text-red-500 rounded-lg hover:bg-red-50 flex items-center justify-center gap-1.5 text-sm"
+          >
+            <Trash2 size={14} />
+            Delete Task
+          </button>
         </div>
       </div>
     </div>

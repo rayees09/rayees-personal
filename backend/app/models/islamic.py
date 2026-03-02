@@ -90,7 +90,7 @@ class RamadanDay(Base):
     fasted = Column(Boolean, default=False)
     # New fields for missed fasting tracking
     fasting_status = Column(String(20), default="not_tracked")  # fasted, missed, exempt, not_tracked
-    missed_reason = Column(String(50), nullable=True)  # illness, travel, menstruation, other
+    missed_reason = Column(String(50), nullable=True)  # illness, travel, other
     suhoor = Column(Boolean, default=False)
     iftar = Column(Boolean, default=False)
     taraweeh = Column(Boolean, default=False)
@@ -111,7 +111,7 @@ class QadhaDay(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     ramadan_year = Column(Integer, nullable=False)  # Which Ramadan year was missed
     original_date = Column(Date, nullable=True)  # Original missed date (optional)
-    missed_reason = Column(String(50), nullable=True)  # illness, travel, menstruation, other
+    missed_reason = Column(String(50), nullable=True)  # illness, travel, other
     compensated_date = Column(Date, nullable=True)  # When qadha was performed
     is_compensated = Column(Boolean, default=False)
     notes = Column(String(500), nullable=True)
